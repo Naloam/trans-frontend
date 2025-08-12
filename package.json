@@ -1,0 +1,40 @@
+{
+  "name": "immersive-translate",
+  "version": "0.1.0",
+  "description": "A powerful translation extension with inline tooltip and immersive overlay modes",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "node build.js",
+    "build:dev": "vite build --mode development",
+    "preview": "vite preview",
+    "clean": "rimraf dist",
+    "package": "npm run build && cd dist && zip -r ../immersive-translate.zip ."
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.251",
+    "@types/node": "^20.8.10",
+    "@types/react": "^18.2.37",
+    "@types/react-dom": "^18.2.15",
+    "@vitejs/plugin-react": "^4.1.1",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.31",
+    "rimraf": "^5.0.5",
+    "tailwindcss": "^3.3.5",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.0"
+  },
+  "keywords": [
+    "chrome-extension",
+    "translation",
+    "react",
+    "typescript",
+    "vite"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}
