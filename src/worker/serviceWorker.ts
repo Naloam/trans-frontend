@@ -30,6 +30,29 @@ interface TranslateResponse {
   };
 }
 
+// 后端API请求格式
+interface BackendTranslateRequest {
+  target: string;
+  segments: Array<{
+    id: string;
+    text: string;
+    model?: string;
+  }>;
+  extra_args?: {
+    style?: string;
+    identity?: string;
+  };
+}
+
+// 后端API响应格式
+interface BackendTranslateResponse {
+  translated: string;
+  segments: Array<{
+    id: string;
+    text: string;
+  }>;
+}
+
 interface MessageRequest {
   type: 'translate' | 'languages' | 'detect' | 'clearCache';
   payload: any;
@@ -163,17 +186,27 @@ async function fetchTranslation(request: TranslateRequest, retries: number = 2):
   const timeoutId = setTimeout(() => controller.abort(), 8000); // 8秒超时
 
   try {
-    const response = await fetch('https://api.example.com/v1/translate', {
+    // 构造后端API请求格式
+    const backendRequest: BackendTranslateRequest = {
+      target: request.target,
+      segments: [
+        {
+          id: request.id,
+          text: request.text,
+          // model 字段可选，这里暂不指定
+        }
+      ],
+      // extra_args 可以根据需要添加
+    };
+
+    const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:8000';
+    
+    const response = await fetch(`${backendUrl}/translate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        text: request.text,
-        source: request.source,
-        target: request.target,
-        format: request.format || 'text'
-      }),
+      body: JSON.stringify(backendRequest),
       signal: controller.signal
     });
 
@@ -183,21 +216,31 @@ async function fetchTranslation(request: TranslateRequest, retries: number = 2):
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
-    const data = await response.json();
+    // 处理后端响应格式
+    const backendResponse: BackendTranslateResponse = await response.json();
+    
+    // 转换为前端期望的格式
+    const translatedSegment = backendResponse.segments.find(segment => segment.id === request.id);
+    
+    if (!translatedSegment) {
+      throw new Error('无法找到对应的翻译结果');
+    }
+
     return {
       ok: true,
       data: {
-        translatedText: data.translatedText,
-        detectedLanguage: data.detectedLanguage,
-        alternatives: data.alternatives || []
+        translatedText: translatedSegment.text,
+        detectedLanguage: backendResponse.translated,
+        alternatives: []
       }
     };
 
-  } catch (error) {
+  } catch (error: any) {
     clearTimeout(timeoutId);
     
     if (retries > 0 && error.name !== 'AbortError') {
       console.log(`Translation request failed, retrying... (${retries} attempts left)`);
+      await new Promise(resolve => setTimeout(resolve, 1000)); // 等待1秒后重试
       await new Promise(resolve => setTimeout(resolve, 1000)); // 等待1秒后重试
       return fetchTranslation(request, retries - 1);
     }
@@ -237,7 +280,7 @@ async function handleTranslateRequest(request: TranslateRequest): Promise<Transl
 
     return result;
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Translation handler error:', error);
     return {
       ok: false,
@@ -259,13 +302,6 @@ async function getConfig(): Promise<ExtensionConfig> {
 }
 
 // 保存配置
-async function setConfig(config: Partial<ExtensionConfig>): Promise<void> {
-  return new Promise((resolve) => {
-    chrome.storage.local.set(config, () => {
-      resolve();
-    });
-  });
-}
 
 // 消息处理器
 async function handleMessage(
@@ -301,31 +337,40 @@ async function handleMessage(
         break;
 
       case 'detect':
-        // 语言检测（简单实现）
-        const text = message.payload.text;
-        const detected = /[\u4e00-\u9fff]/.test(text) ? 'zh' : 'en';
+        // 语言检测（模拟数据）
         sendResponse({
           ok: true,
-          data: { detectedLanguage: detected }
+          data: {
+            detected: 'en'
+          }
         });
         break;
 
       case 'clearCache':
         await cache.clearExpired();
-        sendResponse({ ok: true, data: { message: 'Cache cleared' } });
+        sendResponse({
+          ok: true,
+          data: { message: 'Cache cleared' }
+        });
         break;
 
       default:
         sendResponse({
           ok: false,
-          error: { code: 'UNKNOWN_MESSAGE_TYPE', message: `Unknown message type: ${message.type}` }
+          error: {
+            code: 'UNKNOWN_MESSAGE_TYPE',
+            message: `Unknown message type: ${message.type}`
+          }
         });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Message handler error:', error);
     sendResponse({
       ok: false,
-      error: { code: 'HANDLER_ERROR', message: error.message }
+      error: {
+        code: 'MESSAGE_HANDLER_ERROR',
+        message: error.message || 'Internal message handler error'
+      }
     });
   }
 }
@@ -336,32 +381,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true; // 保持消息通道开放以支持异步响应
 });
 
-// 长连接处理（用于实时通信）
-chrome.runtime.onConnect.addListener((port) => {
-  console.log('Service worker connected:', port.name);
+// 安装和更新事件
+chrome.runtime.onInstalled.addListener((details) => {
+  console.log('Extension installed or updated:', details.reason);
   
-  port.onMessage.addListener(async (message) => {
-    const response = await new Promise<MessageResponse>((resolve) => {
-      handleMessage(message, { tab: port.sender?.tab }, resolve);
-    });
-    port.postMessage(response);
-  });
-
-  port.onDisconnect.addListener(() => {
-    console.log('Service worker disconnected:', port.name);
+  // 初始化缓存
+  cache.init().catch(error => {
+    console.error('Failed to initialize cache:', error);
   });
 });
 
-// 定期清理过期缓存
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === 'clearExpiredCache') {
-    cache.clearExpired().catch(console.error);
-  }
-});
-
-// 设置定期清理任务
-chrome.alarms.create('clearExpiredCache', { periodInMinutes: 60 });
-
-// Service Worker 启动时初始化
-console.log('Immersive Translate Service Worker started');
-cache.init().catch(console.error);
+console.log('Service Worker loaded');

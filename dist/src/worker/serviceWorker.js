@@ -93,36 +93,48 @@ async function fetchTranslation(request, retries = 2) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 8e3);
   try {
-    const response = await fetch("https://api.example.com/v1/translate", {
+    const backendRequest = {
+      target: request.target,
+      segments: [
+        {
+          id: request.id,
+          text: request.text
+          // model 字段可选，这里暂不指定
+        }
+      ]
+      // extra_args 可以根据需要添加
+    };
+    const backendUrl = "http://localhost:8000";
+    const response = await fetch(`${backendUrl}/translate`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({
-        text: request.text,
-        source: request.source,
-        target: request.target,
-        format: request.format || "text"
-      }),
+      body: JSON.stringify(backendRequest),
       signal: controller.signal
     });
     clearTimeout(timeoutId);
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
-    const data = await response.json();
+    const backendResponse = await response.json();
+    const translatedSegment = backendResponse.segments.find((segment) => segment.id === request.id);
+    if (!translatedSegment) {
+      throw new Error("无法找到对应的翻译结果");
+    }
     return {
       ok: true,
       data: {
-        translatedText: data.translatedText,
-        detectedLanguage: data.detectedLanguage,
-        alternatives: data.alternatives || []
+        translatedText: translatedSegment.text,
+        detectedLanguage: backendResponse.translated,
+        alternatives: []
       }
     };
   } catch (error) {
     clearTimeout(timeoutId);
     if (retries > 0 && error.name !== "AbortError") {
       console.log(`Translation request failed, retrying... (${retries} attempts left)`);
+      await new Promise((resolve) => setTimeout(resolve, 1e3));
       await new Promise((resolve) => setTimeout(resolve, 1e3));
       return fetchTranslation(request, retries - 1);
     }
@@ -193,28 +205,37 @@ async function handleMessage(message, sender, sendResponse) {
         });
         break;
       case "detect":
-        const text = message.payload.text;
-        const detected = /[\u4e00-\u9fff]/.test(text) ? "zh" : "en";
         sendResponse({
           ok: true,
-          data: { detectedLanguage: detected }
+          data: {
+            detected: "en"
+          }
         });
         break;
       case "clearCache":
         await cache.clearExpired();
-        sendResponse({ ok: true, data: { message: "Cache cleared" } });
+        sendResponse({
+          ok: true,
+          data: { message: "Cache cleared" }
+        });
         break;
       default:
         sendResponse({
           ok: false,
-          error: { code: "UNKNOWN_MESSAGE_TYPE", message: `Unknown message type: ${message.type}` }
+          error: {
+            code: "UNKNOWN_MESSAGE_TYPE",
+            message: `Unknown message type: ${message.type}`
+          }
         });
     }
   } catch (error) {
     console.error("Message handler error:", error);
     sendResponse({
       ok: false,
-      error: { code: "HANDLER_ERROR", message: error.message }
+      error: {
+        code: "MESSAGE_HANDLER_ERROR",
+        message: error.message || "Internal message handler error"
+      }
     });
   }
 }
@@ -222,24 +243,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   handleMessage(message, sender, sendResponse);
   return true;
 });
-chrome.runtime.onConnect.addListener((port) => {
-  console.log("Service worker connected:", port.name);
-  port.onMessage.addListener(async (message) => {
-    const response = await new Promise((resolve) => {
-      handleMessage(message, { tab: port.sender?.tab }, resolve);
-    });
-    port.postMessage(response);
-  });
-  port.onDisconnect.addListener(() => {
-    console.log("Service worker disconnected:", port.name);
+chrome.runtime.onInstalled.addListener((details) => {
+  console.log("Extension installed or updated:", details.reason);
+  cache.init().catch((error) => {
+    console.error("Failed to initialize cache:", error);
   });
 });
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === "clearExpiredCache") {
-    cache.clearExpired().catch(console.error);
-  }
-});
-chrome.alarms.create("clearExpiredCache", { periodInMinutes: 60 });
-console.log("Immersive Translate Service Worker started");
-cache.init().catch(console.error);
+console.log("Service Worker loaded");
 //# sourceMappingURL=serviceWorker.js.map

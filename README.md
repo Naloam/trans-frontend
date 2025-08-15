@@ -32,10 +32,14 @@
 
 ### 开发环境安装
 
-1. **克隆项目**
+1. **克隆项目并配置好环境**
    ```bash
    git clone <repository-url>
    cd immersive-translate
+   ```
+   ```
+   cp .env.example .env
+   # 修改.env里的BACKEND_URL为后端地址
    ```
 
 2. **安装依赖**
