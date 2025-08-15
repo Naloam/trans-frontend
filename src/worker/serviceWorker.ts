@@ -193,7 +193,7 @@ async function fetchTranslation(request: TranslateRequest, retries: number = 2):
         {
           id: request.id,
           text: request.text,
-          // model 字段可选，这里暂不指定
+          model: "qwen-turbo-latest" // 默认使用qwen-turbo-latest模型
         }
       ],
       // extra_args 可以根据需要添加

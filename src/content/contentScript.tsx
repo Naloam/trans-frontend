@@ -36,6 +36,11 @@ let shadowRoot: ShadowRoot | null = null;
 let bubbleContainer: HTMLDivElement | null = null;
 let isImmersiveMode = false;
 let currentSelection: Selection | null = null;
+// 拖动相关变量
+let isDragging = false;
+let dragOffsetX = 0;
+let dragOffsetY = 0;
+let currentBubble: HTMLDivElement | null = null;
 
 // 创建 Shadow DOM 容器
 function createShadowContainer(): ShadowRoot {
@@ -151,16 +156,18 @@ function createTranslationBubble(): TranslationBubble {
 
     shadow.appendChild(bubble);
     isVisible = true;
+    currentBubble = bubble;
 
     // 绑定事件
     bindBubbleEvents(bubble, selection, text);
+    bindDragEvents(bubble);
 
     // 开始翻译
     try {
       const result = await translateText(text);
       updateBubbleContent(bubble, result);
-    } catch (error) {
-      showBubbleError(bubble, error.message);
+    } catch (error: any) {
+      showBubbleError(bubble, error.message || '未知错误');
     }
 
     // 点击外部关闭
@@ -174,17 +181,59 @@ function createTranslationBubble(): TranslationBubble {
       bubble.remove();
       bubble = null;
       isVisible = false;
+      currentBubble = null;
       document.removeEventListener('click', handleOutsideClick, true);
     }
   };
 
-  const handleOutsideClick = (event: Event) => {
+  const handleOutsideClick = (event: MouseEvent) => {
     if (bubble && event.target && !bubble.contains(event.target as Node)) {
       hide();
     }
   };
 
   return { show, hide, isVisible: () => isVisible };
+}
+
+// 绑定拖动事件
+function bindDragEvents(bubble: HTMLDivElement) {
+  let isDragging = false;
+  let offsetX = 0, offsetY = 0;
+  
+  const bubbleHeader = bubble.querySelector('.bubble-header') as HTMLElement;
+  if (!bubbleHeader) return;
+  
+  bubbleHeader.addEventListener('mousedown', (e) => {
+    // 只有在标题栏上按下才触发拖动
+    isDragging = true;
+    const rect = bubble.getBoundingClientRect();
+    offsetX = e.clientX - rect.left;
+    offsetY = e.clientY - rect.top;
+    
+    // 防止文本选择
+    e.preventDefault();
+  });
+  
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    
+    const x = e.clientX - offsetX;
+    const y = e.clientY - offsetY;
+    
+    bubble.style.left = `${x}px`;
+    bubble.style.top = `${y}px`;
+    bubble.style.transform = 'none'; // 移除原有的变换
+    
+    // 隐藏箭头
+    const arrow = bubble.querySelector('.bubble-arrow') as HTMLElement;
+    if (arrow) {
+      arrow.style.display = 'none';
+    }
+  });
+  
+  document.addEventListener('mouseup', () => {
+    isDragging = false;
+  });
 }
 
 // 绑定气泡事件
@@ -230,8 +279,8 @@ function bindBubbleEvents(bubble: HTMLDivElement, selection: Selection, original
     try {
       const result = await translateText(originalText);
       updateBubbleContent(bubble, result);
-    } catch (error) {
-      showBubbleError(bubble, error.message);
+    } catch (error: any) {
+      showBubbleError(bubble, error.message || '未知错误');
     }
   });
 }
@@ -247,7 +296,37 @@ function updateBubbleContent(bubble: HTMLDivElement, result: TranslationResult) 
   errorEl.style.display = 'none';
 
   if (result.ok && result.data) {
-    translatedTextEl.textContent = result.data.translatedText;
+    // 创建带内联样式的翻译气泡容器
+    const bubbleDiv = document.createElement('div');
+    bubbleDiv.textContent = result.data.translatedText;
+    Object.assign(bubbleDiv.style, {
+      backgroundColor: '#f9f9f9',
+      color: '#000',
+      borderRadius: '8px',
+      padding: '8px',
+      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+      fontSize: '14px',
+      lineHeight: '1.6',
+      maxWidth: '300px',
+      wordWrap: 'break-word',
+      whiteSpace: 'pre-wrap',
+      zIndex: '999999',
+      display: 'inline-block',
+      pointerEvents: 'none',
+      backdropFilter: 'blur(1px)',
+      border: '1px solid rgba(0, 0, 0, 0.1)',
+    });
+    
+    // 检测暗色模式
+    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      bubbleDiv.style.backgroundColor = 'rgba(30, 30, 30, 0.95)';
+      bubbleDiv.style.color = '#fff';
+      bubbleDiv.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+    }
+    
+    // 清空原来的translatedTextEl并添加新的包装元素
+    translatedTextEl.innerHTML = '';
+    translatedTextEl.appendChild(bubbleDiv);
     resultEl.style.display = 'block';
   } else {
     showBubbleError(bubble, result.error?.message || '翻译失败');
@@ -436,7 +515,7 @@ function getSelectionInfo(): { text: string; rect: DOMRect } | null {
 const translationBubble = createTranslationBubble();
 
 // 事件监听器
-document.addEventListener('mouseup', (event) => {
+document.addEventListener('mouseup', () => {
   // 延迟检查选择，确保选择已完成
   setTimeout(() => {
     const selectionInfo = getSelectionInfo();
@@ -450,7 +529,7 @@ document.addEventListener('mouseup', (event) => {
 });
 
 // 双击翻译
-document.addEventListener('dblclick', (event) => {
+document.addEventListener('dblclick', () => {
   setTimeout(() => {
     const selectionInfo = getSelectionInfo();
     if (selectionInfo) {
@@ -479,7 +558,7 @@ document.addEventListener('keydown', (event) => {
 });
 
 // 监听来自 Service Worker 的消息
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, _sender) => {
   if (message.type === 'toggleImmersive') {
     const selectionInfo = getSelectionInfo();
     if (selectionInfo) {
