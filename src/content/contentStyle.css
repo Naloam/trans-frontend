@@ -121,11 +121,16 @@
   color: #111827;
   font-size: 14px;
   font-weight: 500;
-  line-height: 1.5;
+  line-height: 1.6;
   margin-bottom: 12px;
   word-wrap: break-word;
   max-height: 120px;
   overflow-y: auto;
+}
+
+/* 添加拖动支持 */
+.translation-bubble {
+  cursor: move;
 }
 
 /* 操作按钮组 */
@@ -253,6 +258,23 @@
   border-bottom: 9px solid #e5e7eb;
 }
 
+/* 新增的翻译气泡样式 */
+.translation-bubble {
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  padding: 8px 12px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  color: #000;
+  display: inline-block;
+  z-index: 9999;
+}
+@media (prefers-color-scheme: dark) {
+  .translation-bubble {
+    background-color: rgba(0, 0, 0, 0.8);
+    color: #fff;
+  }
+}
+
 /* 沉浸式覆盖层 */
 .immersive-overlay {
   position: fixed;
@@ -333,6 +355,20 @@
   margin: 0 0 16px 0;
 }
 
+/* 翻译结果文本框样式优化 */
+.translation-panel .text-content {
+  padding: 12px;
+  background: #f9f9f9;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  min-height: 100px;
+  line-height: 1.6;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  /* 确保在任何背景下都清晰可见 */
+  backdrop-filter: blur(1px);
+  -webkit-backdrop-filter: blur(1px);
+}
+
 .text-content {
   color: #111827;
   line-height: 1.6;
@@ -372,32 +408,85 @@
   border-color: #9ca3af;
 }
 
+.btn-replace-all:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
 .btn-replace-all {
-  background: #3b82f6;
+  background: #dc2626;
   color: white;
-  border-color: #3b82f6;
+  border-color: #dc2626;
 }
 
 .btn-replace-all:hover {
-  background: #2563eb;
-  border-color: #2563eb;
+  background: #b91c1c;
+  border-color: #b91c1c;
 }
 
-/* Toast 消息 */
+/* 提示消息 */
 .toast-message {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  background: #374151;
-  color: white;
-  padding: 12px 20px;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  z-index: 2147483647;
-  pointer-events: auto;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
-  animation: toast-slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: toast-appear 0.3s ease-out;
+}
+
+/* 动画定义 */
+@keyframes bubble-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes result-appear {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes overlay-appear {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes content-slide-up {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -45%);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}
+
+@keyframes toast-appear {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 /* 暗色主题支持 */
@@ -420,6 +509,10 @@
 
   .translated-text {
     color: #f9fafb;
+    background: #111827;
+    border-color: #374151;
+    backdrop-filter: blur(1px);
+    -webkit-backdrop-filter: blur(1px);
   }
 
   .bubble-actions button {
@@ -530,69 +623,6 @@
 
   .immersive-header .btn-close {
     border: 2px solid #000000;
-  }
-}
-
-/* 动画定义 */
-@keyframes bubble-appear {
-  from {
-    opacity: 0;
-    transform: translateY(10px) scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes result-appear {
-  from {
-    opacity: 0;
-    transform: translateY(5px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes overlay-appear {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes content-slide-up {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -45%) scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
-  }
-}
-
-@keyframes toast-slide-in {
-  from {
-    opacity: 0;
-    transform: translateX(100%);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
   }
 }
 
