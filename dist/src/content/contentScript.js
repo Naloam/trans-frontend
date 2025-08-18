@@ -310,6 +310,10 @@ function bindBubbleEvents(bubble, selection, originalText) {
     openImmersiveMode(originalText);
   });
   retryBtn?.addEventListener("click", async () => {
+    if (!bubble || !document.contains(bubble)) {
+      console.warn("Bubble no longer exists, skipping retry");
+      return;
+    }
     showBubbleLoading(bubble);
     try {
       const result = await translateText(originalText);
@@ -320,10 +324,18 @@ function bindBubbleEvents(bubble, selection, originalText) {
   });
 }
 function updateBubbleContent(bubble, result) {
+  if (!bubble) {
+    console.warn("Bubble is null, cannot update content");
+    return;
+  }
   const loadingEl = bubble.querySelector(".translation-loading");
   const resultEl = bubble.querySelector(".translation-result");
   const errorEl = bubble.querySelector(".bubble-error");
   const translatedTextEl = bubble.querySelector(".translated-text");
+  if (!loadingEl || !resultEl || !errorEl || !translatedTextEl) {
+    console.warn("Required bubble elements not found for content update");
+    return;
+  }
   loadingEl.style.display = "none";
   errorEl.style.display = "none";
   if (result.ok && result.data) {
@@ -359,18 +371,38 @@ function updateBubbleContent(bubble, result) {
   }
 }
 function showBubbleLoading(bubble) {
+  if (!bubble) {
+    console.warn("Bubble is null, cannot show loading");
+    return;
+  }
+  if (!document.contains(bubble)) {
+    console.warn("Bubble is no longer in DOM, cannot show loading");
+    return;
+  }
   const loadingEl = bubble.querySelector(".translation-loading");
   const resultEl = bubble.querySelector(".translation-result");
   const errorEl = bubble.querySelector(".bubble-error");
-  loadingEl.style.display = "block";
-  resultEl.style.display = "none";
-  errorEl.style.display = "none";
+  if (!loadingEl || !resultEl || !errorEl) {
+    console.warn("Required bubble elements not found for loading");
+    return;
+  }
+  if (loadingEl) loadingEl.style.display = "block";
+  if (resultEl) resultEl.style.display = "none";
+  if (errorEl) errorEl.style.display = "none";
 }
 function showBubbleError(bubble, message) {
+  if (!bubble) {
+    console.warn("Bubble is null, cannot show error:", message);
+    return;
+  }
   const loadingEl = bubble.querySelector(".translation-loading");
   const resultEl = bubble.querySelector(".translation-result");
   const errorEl = bubble.querySelector(".bubble-error");
   const errorMessageEl = bubble.querySelector(".error-message");
+  if (!loadingEl || !resultEl || !errorEl || !errorMessageEl) {
+    console.warn("Required bubble elements not found");
+    return;
+  }
   loadingEl.style.display = "none";
   resultEl.style.display = "none";
   errorMessageEl.textContent = message;

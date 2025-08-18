@@ -454,13 +454,18 @@ async function handleMessage(
     }
   } catch (error: any) {
     console.error('Message handler error:', error);
-    sendResponse({
-      ok: false,
-      error: {
-        code: 'MESSAGE_HANDLER_ERROR',
-        message: error.message || 'Internal message handler error'
-      }
-    });
+    // 使用try-catch包装sendResponse，避免context销毁时报错
+    try {
+      sendResponse({
+        ok: false,
+        error: {
+          code: 'MESSAGE_HANDLER_ERROR',
+          message: error.message || 'Internal message handler error'
+        }
+      });
+    } catch (sendError) {
+      console.error('Failed to send error response:', sendError);
+    }
   }
 }
 

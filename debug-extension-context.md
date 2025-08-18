@@ -198,3 +198,6 @@ function resetExtensionState() {
 3. 错误截图
 4. 浏览器控制台日志
 5. 重现步骤
+
+
+

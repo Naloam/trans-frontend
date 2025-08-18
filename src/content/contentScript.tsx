@@ -11,6 +11,27 @@
  * 通信约束：所有网络请求通过 Service Worker 处理，Content Script 不直接访问外部API
  */
 
+// 扩展Window接口以避免TypeScript错误
+interface Window {
+  __IMMERSIVE_TRANSLATE_LOADED__?: boolean;
+}
+
+// 防止重复注入
+const initContentScript = () => {
+  if (window.__IMMERSIVE_TRANSLATE_LOADED__) {
+    console.log('Immersive Translate content script already loaded, skipping initialization');
+    return false;
+  }
+  window.__IMMERSIVE_TRANSLATE_LOADED__ = true;
+  return true;
+};
+
+// 如果脚本已经加载，则直接退出函数
+if (!initContentScript()) {
+  // 退出整个脚本执行
+  throw new Error('Immersive Translate content script already loaded, skipping initialization');
+}
+
 // 类型定义
 interface TranslationBubble {
   show: (selection: Selection, text: string, rect: DOMRect) => void;
@@ -96,6 +117,9 @@ document.addEventListener('visibilitychange', () => {
 // 监听页面卸载，清理状态
 window.addEventListener('beforeunload', () => {
   resetExtensionState();
+  // 清理防重复注入标记
+  // @ts-ignore TypeScript不识别自定义属性，但这是有效的JavaScript
+  delete window.__IMMERSIVE_TRANSLATE_LOADED__;
 });
 
 // 页面加载完成后自动初始化扩展
@@ -156,6 +180,19 @@ function createShadowContainer(): ShadowRoot {
 async function sendMessage(type: string, payload: any): Promise<TranslationResult> {
   return new Promise((resolve) => {
     try {
+      // 检查扩展上下文是否有效
+      if (!chrome.runtime?.sendMessage) {
+        console.warn("Chrome runtime not available");
+        resolve({
+          ok: false,
+          error: {
+            code: 'RUNTIME_UNAVAILABLE',
+            message: '运行时不可用'
+          }
+        });
+        return;
+      }
+
       chrome.runtime.sendMessage({ type, payload }, (response) => {
         if (chrome.runtime.lastError) {
           console.warn("Error sending message to service worker:", chrome.runtime.lastError.message);
@@ -437,6 +474,12 @@ function bindBubbleEvents(bubble: HTMLDivElement, selection: Selection, original
   });
 
   retryBtn?.addEventListener('click', async () => {
+    // 检查bubble是否仍然存在
+    if (!bubble || !document.contains(bubble)) {
+      console.warn('Bubble no longer exists, skipping retry');
+      return;
+    }
+    
     showBubbleLoading(bubble);
     try {
       const result = await translateText(originalText);
@@ -448,11 +491,23 @@ function bindBubbleEvents(bubble: HTMLDivElement, selection: Selection, original
 }
 
 // 更新气泡内容
-function updateBubbleContent(bubble: HTMLDivElement, result: TranslationResult) {
+function updateBubbleContent(bubble: HTMLDivElement | null, result: TranslationResult) {
+  // 检查bubble是否存在
+  if (!bubble) {
+    console.warn('Bubble is null, cannot update content');
+    return;
+  }
+
   const loadingEl = bubble.querySelector('.translation-loading') as HTMLDivElement;
   const resultEl = bubble.querySelector('.translation-result') as HTMLDivElement;
   const errorEl = bubble.querySelector('.bubble-error') as HTMLDivElement;
   const translatedTextEl = bubble.querySelector('.translated-text') as HTMLDivElement;
+
+  // 检查所有必需的元素是否存在
+  if (!loadingEl || !resultEl || !errorEl || !translatedTextEl) {
+    console.warn('Required bubble elements not found for content update');
+    return;
+  }
 
   loadingEl.style.display = 'none';
   errorEl.style.display = 'none';
@@ -496,22 +551,54 @@ function updateBubbleContent(bubble: HTMLDivElement, result: TranslationResult) 
 }
 
 // 显示气泡加载状态
-function showBubbleLoading(bubble: HTMLDivElement) {
-  const loadingEl = bubble.querySelector('.translation-loading') as HTMLDivElement;
-  const resultEl = bubble.querySelector('.translation-result') as HTMLDivElement;
-  const errorEl = bubble.querySelector('.bubble-error') as HTMLDivElement;
+function showBubbleLoading(bubble: HTMLDivElement | null) {
+  // 检查bubble是否存在
+  if (!bubble) {
+    console.warn('Bubble is null, cannot show loading');
+    return;
+  }
 
-  loadingEl.style.display = 'block';
-  resultEl.style.display = 'none';
-  errorEl.style.display = 'none';
+  // 检查bubble是否仍在DOM中
+  if (!document.contains(bubble)) {
+    console.warn('Bubble is no longer in DOM, cannot show loading');
+    return;
+  }
+
+  // 使用可选链操作符安全地查询元素
+  const loadingEl = bubble.querySelector('.translation-loading') as HTMLDivElement | null;
+  const resultEl = bubble.querySelector('.translation-result') as HTMLDivElement | null;
+  const errorEl = bubble.querySelector('.bubble-error') as HTMLDivElement | null;
+
+  // 检查所有必需的元素是否存在
+  if (!loadingEl || !resultEl || !errorEl) {
+    console.warn('Required bubble elements not found for loading');
+    return;
+  }
+
+  // 安全地设置样式
+  if (loadingEl) loadingEl.style.display = 'block';
+  if (resultEl) resultEl.style.display = 'none';
+  if (errorEl) errorEl.style.display = 'none';
 }
 
 // 显示气泡错误
-function showBubbleError(bubble: HTMLDivElement, message: string) {
+function showBubbleError(bubble: HTMLDivElement | null, message: string) {
+  // 检查bubble是否存在
+  if (!bubble) {
+    console.warn('Bubble is null, cannot show error:', message);
+    return;
+  }
+
   const loadingEl = bubble.querySelector('.translation-loading') as HTMLDivElement;
   const resultEl = bubble.querySelector('.translation-result') as HTMLDivElement;
   const errorEl = bubble.querySelector('.bubble-error') as HTMLDivElement;
   const errorMessageEl = bubble.querySelector('.error-message') as HTMLSpanElement;
+
+  // 检查所有必需的元素是否存在
+  if (!loadingEl || !resultEl || !errorEl || !errorMessageEl) {
+    console.warn('Required bubble elements not found');
+    return;
+  }
 
   loadingEl.style.display = 'none';
   resultEl.style.display = 'none';

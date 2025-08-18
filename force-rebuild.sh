@@ -49,3 +49,6 @@ echo "3. 重启Chrome浏览器"
 echo "4. 重新加载插件 (选择dist目录)"
 echo ""
 echo "🎯 这次应该彻底解决问题了！"
+
+
+

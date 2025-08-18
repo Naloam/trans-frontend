@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, c as createRoot } from "./tailwind-RQ8VxBFH.js";
+import { r as reactExports, j as jsxRuntimeExports, c as createRoot } from "./tailwind-Cqpfzv93.js";
 const LANGUAGES = [
   { code: "auto", name: "自动检测" },
   { code: "zh", name: "中文" },
@@ -343,4 +343,4 @@ if (container) {
 } else {
   console.error("Popup root element not found");
 }
-//# sourceMappingURL=popup-CMZMqGam.js.map
+//# sourceMappingURL=popup-BxilINFV.js.map

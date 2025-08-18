@@ -119,3 +119,6 @@ echo "   - 插件错误页面应该显示 'Nothing to see here, move along.'"
 echo "   - 控制台不再显示错误信息"
 echo ""
 echo "✨ 这次是永久修复，以后重新构建也不会再出现这个问题！"
+
+
+
