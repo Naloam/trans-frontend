@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, c as createRoot } from "./tailwind-dymLY1kX.js";
+import { r as reactExports, j as jsxRuntimeExports, c as createRoot } from "./tailwind-RQ8VxBFH.js";
 const LANGUAGES = [
   { code: "auto", name: "自动检测" },
   { code: "zh", name: "中文" },
@@ -38,10 +38,14 @@ const Popup = () => {
   const [alternatives, setAlternatives] = reactExports.useState([]);
   const [selectedModel, setSelectedModel] = reactExports.useState("gpt-4o");
   const [selectedIdentity, setSelectedIdentity] = reactExports.useState("通用专家");
+  const [isImageTranslationEnabled, setIsImageTranslationEnabled] = reactExports.useState(true);
+  const [isDocumentTranslationEnabled, setIsDocumentTranslationEnabled] = reactExports.useState(true);
   reactExports.useEffect(() => {
-    chrome.storage.local.get(["defaultSourceLang", "defaultTargetLang"], (result) => {
+    chrome.storage.local.get(["defaultSourceLang", "defaultTargetLang", "enableImageTranslation", "enableDocumentTranslation"], (result) => {
       if (result.defaultSourceLang) setSourceLang(result.defaultSourceLang);
       if (result.defaultTargetLang) setTargetLang(result.defaultTargetLang);
+      if (result.enableImageTranslation !== void 0) setIsImageTranslationEnabled(result.enableImageTranslation);
+      if (result.enableDocumentTranslation !== void 0) setIsDocumentTranslationEnabled(result.enableDocumentTranslation);
     });
   }, []);
   const saveLanguageSettings = reactExports.useCallback(() => {
@@ -94,6 +98,40 @@ const Popup = () => {
       setIsLoading(false);
     }
   }, [inputText, sourceLang, targetLang]);
+  const handleFileSelect = reactExports.useCallback((accept, type) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = accept;
+    input.onchange = (event) => {
+      const file = event.target.files?.[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          chrome.runtime.sendMessage({
+            type: type === "image" ? "translateImage" : "translateDocument",
+            payload: {
+              file: reader.result,
+              fileName: file.name,
+              fileType: file.type
+            }
+          }, (response) => {
+            if (chrome.runtime.lastError) {
+              console.warn("Error sending message to service worker:", chrome.runtime.lastError.message);
+              setError("发送消息到后台服务时出错");
+              return;
+            }
+            if (response.ok) {
+              setTranslatedText(response.data.translatedText);
+            } else {
+              setError(response.error?.message || "文件翻译失败");
+            }
+          });
+        };
+        reader.readAsArrayBuffer(file);
+      }
+    };
+    input.click();
+  }, []);
   const handleSwapLanguages = reactExports.useCallback(() => {
     if (sourceLang === "auto") {
       setSourceLang(targetLang);
@@ -241,6 +279,28 @@ const Popup = () => {
           children: isLoading ? "翻译中..." : "翻译"
         }
       ),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex space-x-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: () => handleFileSelect("image/*", "image"),
+            disabled: !isImageTranslationEnabled,
+            className: `flex-1 py-2 px-4 rounded font-medium transition-colors ${isImageTranslationEnabled ? "bg-purple-600 text-white hover:bg-purple-700" : "bg-gray-300 text-gray-500 cursor-not-allowed"}`,
+            type: "button",
+            children: "图片翻译"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: () => handleFileSelect(".txt,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document", "document"),
+            disabled: !isDocumentTranslationEnabled,
+            className: `flex-1 py-2 px-4 rounded font-medium transition-colors ${isDocumentTranslationEnabled ? "bg-indigo-600 text-white hover:bg-indigo-700" : "bg-gray-300 text-gray-500 cursor-not-allowed"}`,
+            type: "button",
+            children: "文件翻译"
+          }
+        )
+      ] }),
       error && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-3 bg-red-50 border border-red-200 rounded text-red-700", children: [
         "❌ ",
         error
@@ -283,4 +343,4 @@ if (container) {
 } else {
   console.error("Popup root element not found");
 }
-//# sourceMappingURL=popup-DaO6k4nj.js.map
+//# sourceMappingURL=popup-CMZMqGam.js.map

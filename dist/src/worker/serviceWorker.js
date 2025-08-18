@@ -98,8 +98,9 @@ async function fetchTranslation(request, retries = 2) {
       segments: [
         {
           id: request.id,
-          text: request.text
-          // model 字段可选，这里暂不指定
+          text: request.text,
+          model: "qwen-turbo-latest"
+          // 默认使用qwen-turbo-latest模型
         }
       ]
       // extra_args 可以根据需要添加
@@ -147,6 +148,54 @@ async function fetchTranslation(request, retries = 2) {
     };
   }
 }
+async function translateImage(_fileData, fileName, fileType) {
+  try {
+    console.log("Translating image:", fileName, fileType);
+    await new Promise((resolve) => setTimeout(resolve, 2e3));
+    return {
+      ok: true,
+      data: {
+        translatedText: `这是从图片 "${fileName}" 中识别并翻译的文本内容。
+
+OCR识别和翻译功能需要连接到后端服务来实现。`,
+        detectedLanguage: "en",
+        alternatives: []
+      }
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: {
+        code: "IMAGE_TRANSLATION_ERROR",
+        message: error.message || "图片翻译失败"
+      }
+    };
+  }
+}
+async function translateDocument(_fileData, fileName, fileType) {
+  try {
+    console.log("Translating document:", fileName, fileType);
+    await new Promise((resolve) => setTimeout(resolve, 2e3));
+    return {
+      ok: true,
+      data: {
+        translatedText: `这是从文档 "${fileName}" 中提取并翻译的文本内容。
+
+文档解析和翻译功能需要连接到后端服务来实现。`,
+        detectedLanguage: "en",
+        alternatives: []
+      }
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: {
+        code: "DOCUMENT_TRANSLATION_ERROR",
+        message: error.message || "文档翻译失败"
+      }
+    };
+  }
+}
 async function handleTranslateRequest(request) {
   try {
     const hash = await generateHash(request.text, request.source, request.target, request.format);
@@ -188,6 +237,22 @@ async function handleMessage(message, sender, sendResponse) {
         const translateResult = await handleTranslateRequest(message.payload);
         sendResponse(translateResult);
         break;
+      case "translateImage":
+        const imageTranslateResult = await translateImage(
+          message.payload.file,
+          message.payload.fileName,
+          message.payload.fileType
+        );
+        sendResponse(imageTranslateResult);
+        break;
+      case "translateDocument":
+        const documentTranslateResult = await translateDocument(
+          message.payload.file,
+          message.payload.fileName,
+          message.payload.fileType
+        );
+        sendResponse(documentTranslateResult);
+        break;
       case "languages":
         sendResponse({
           ok: true,
@@ -219,6 +284,12 @@ async function handleMessage(message, sender, sendResponse) {
           data: { message: "Cache cleared" }
         });
         break;
+      case "ping":
+        sendResponse({
+          ok: true,
+          data: { message: "pong" }
+        });
+        break;
       default:
         sendResponse({
           ok: false,
@@ -239,6 +310,43 @@ async function handleMessage(message, sender, sendResponse) {
     });
   }
 }
+async function setupContextMenus() {
+  try {
+    await chrome.contextMenus.removeAll();
+    console.log("Existing context menus removed");
+  } catch (error) {
+    console.log("No existing context menus to remove or error:", error);
+  }
+  try {
+    chrome.contextMenus.create({
+      id: "translateImage",
+      title: "翻译选中图片",
+      contexts: ["image"],
+      documentUrlPatterns: ["<all_urls>"]
+    });
+    chrome.contextMenus.create({
+      id: "translateDocument",
+      title: "翻译文件",
+      contexts: ["link"],
+      documentUrlPatterns: ["<all_urls>"],
+      targetUrlPatterns: ["*://*/*.pdf", "*://*/*.txt", "*://*/*.docx", "*://*/*.doc"]
+    });
+    console.log("Context menus created successfully");
+  } catch (error) {
+    console.error("Failed to create context menus:", error);
+  }
+}
+chrome.runtime.onInstalled.addListener(() => {
+  setupContextMenus();
+});
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  console.log("Context menu clicked on tab:", tab?.id);
+  if (info.menuItemId === "translateImage" && info.srcUrl) {
+    console.log("Translate image clicked:", info.srcUrl);
+  } else if (info.menuItemId === "translateDocument" && info.linkUrl) {
+    console.log("Translate document clicked:", info.linkUrl);
+  }
+});
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   handleMessage(message, sender, sendResponse);
   return true;
@@ -248,6 +356,35 @@ chrome.runtime.onInstalled.addListener((details) => {
   cache.init().catch((error) => {
     console.error("Failed to initialize cache:", error);
   });
+});
+self.addEventListener("install", (event) => {
+  console.log("Service Worker installing...");
+  event.waitUntil(self.skipWaiting());
+});
+self.addEventListener("activate", (event) => {
+  console.log("Service Worker activating...");
+  event.waitUntil(
+    Promise.all([
+      self.clients.claim(),
+      // 清理旧的缓存
+      caches.keys().then((cacheNames) => {
+        return Promise.all(
+          cacheNames.map((cacheName) => {
+            if (cacheName !== "immersive-translate-v1") {
+              console.log("Deleting old cache:", cacheName);
+              return caches.delete(cacheName);
+            }
+          })
+        );
+      })
+    ])
+  );
+});
+self.addEventListener("error", (event) => {
+  console.error("Service Worker error:", event.error);
+});
+self.addEventListener("unhandledrejection", (event) => {
+  console.error("Service Worker unhandled rejection:", event.reason);
 });
 console.log("Service Worker loaded");
 //# sourceMappingURL=serviceWorker.js.map

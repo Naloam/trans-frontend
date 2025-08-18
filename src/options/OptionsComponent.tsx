@@ -18,6 +18,8 @@ interface Settings {
   fontSize: number;
   showOriginalText: boolean;
   enableSoundEffect: boolean;
+  enableImageTranslation: boolean; // 新增图片翻译设置项
+  enableDocumentTranslation: boolean; // 新增文件翻译设置项
 }
 
 interface LanguageOption {
@@ -59,7 +61,9 @@ const DEFAULT_SETTINGS: Settings = {
   theme: 'auto',
   fontSize: 14,
   showOriginalText: true,
-  enableSoundEffect: false
+  enableSoundEffect: false,
+  enableImageTranslation: true, // 默认启用图片翻译
+  enableDocumentTranslation: true // 默认启用文件翻译
 };
 
 const OptionsComponent: React.FC = () => {
@@ -322,19 +326,64 @@ const OptionsComponent: React.FC = () => {
 
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-medium text-gray-900">音效提示</h3>
-                  <p className="text-sm text-gray-500">翻译完成时播放提示音</p>
+                  <h3 className="text-sm font-medium text-gray-900">音效</h3>
+                  <p className="text-sm text-gray-500">启用翻译完成音效</p>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settings.enableSoundEffect}
-                    onChange={(e) => updateSetting('enableSoundEffect', e.target.checked)}
-                    className="sr-only peer"
+                <button
+                  onClick={() => updateSetting('enableSoundEffect', !settings.enableSoundEffect)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    settings.enableSoundEffect ? 'bg-blue-600' : 'bg-gray-200'
+                  }`}
+                  type="button"
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      settings.enableSoundEffect ? 'translate-x-6' : 'translate-x-1'
+                    }`}
                   />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                </label>
+                </button>
               </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-medium text-gray-900">图片翻译</h3>
+                  <p className="text-sm text-gray-500">启用图片翻译功能</p>
+                </div>
+                <button
+                  onClick={() => updateSetting('enableImageTranslation', !settings.enableImageTranslation)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    settings.enableImageTranslation ? 'bg-blue-600' : 'bg-gray-200'
+                  }`}
+                  type="button"
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      settings.enableImageTranslation ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-medium text-gray-900">文件翻译</h3>
+                  <p className="text-sm text-gray-500">启用文档翻译功能（PDF/TXT/Docx）</p>
+                </div>
+                <button
+                  onClick={() => updateSetting('enableDocumentTranslation', !settings.enableDocumentTranslation)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    settings.enableDocumentTranslation ? 'bg-blue-600' : 'bg-gray-200'
+                  }`}
+                  type="button"
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      settings.enableDocumentTranslation ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
             </div>
           </section>
 

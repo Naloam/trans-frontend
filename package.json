@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node build.js",
+    "build": "vite build",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "clean": "rimraf dist",
@@ -26,7 +26,8 @@
     "rimraf": "^5.0.5",
     "tailwindcss": "^3.3.5",
     "typescript": "^5.2.2",
-    "vite": "^5.0.0"
+    "vite": "^5.0.0",
+    "vite-plugin-static-copy": "^3.1.1"
   },
   "keywords": [
     "chrome-extension",
