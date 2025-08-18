@@ -11,6 +11,27 @@
  * 通信约束：所有网络请求通过 Service Worker 处理，Content Script 不直接访问外部API
  */
 
+// 扩展Window接口以避免TypeScript错误
+interface Window {
+  __IMMERSIVE_TRANSLATE_LOADED__?: boolean;
+}
+
+// 防止重复注入
+const initContentScript = () => {
+  if (window.__IMMERSIVE_TRANSLATE_LOADED__) {
+    console.log('Immersive Translate content script already loaded, skipping initialization');
+    return false;
+  }
+  window.__IMMERSIVE_TRANSLATE_LOADED__ = true;
+  return true;
+};
+
+// 如果脚本已经加载，则直接退出函数
+if (!initContentScript()) {
+  // 退出整个脚本执行
+  throw new Error('Immersive Translate content script already loaded, skipping initialization');
+}
+
 // 类型定义
 interface TranslationBubble {
   show: (selection: Selection, text: string, rect: DOMRect) => void;
@@ -41,6 +62,93 @@ let isDragging = false;
 let dragOffsetX = 0;
 let dragOffsetY = 0;
 let currentBubble: HTMLDivElement | null = null;
+// 扩展状态
+let extensionInitialized = false;
+let retryCount = 0;
+const MAX_RETRY_COUNT = 3;
+
+// 初始化扩展
+async function initializeExtension(): Promise<boolean> {
+  try {
+    if (extensionInitialized) return true;
+
+    // 检查扩展状态
+    const isReady = await checkExtensionStatus();
+    if (isReady) {
+      extensionInitialized = true;
+      retryCount = 0;
+      console.log('Extension initialized successfully');
+      return true;
+    } else {
+      throw new Error('Extension not ready');
+    }
+  } catch (error) {
+    console.warn('Extension initialization failed:', error);
+    retryCount++;
+
+    if (retryCount < MAX_RETRY_COUNT) {
+      // 等待一段时间后重试
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return initializeExtension();
+    } else {
+      console.error('Extension initialization failed after max retries');
+      // 重置状态，允许下次重试
+      extensionInitialized = false;
+      retryCount = 0;
+      return false;
+    }
+  }
+}
+
+// 重置扩展状态
+function resetExtensionState() {
+  extensionInitialized = false;
+  retryCount = 0;
+  console.log('Extension state reset');
+}
+
+// 监听页面可见性变化，在页面重新激活时重置状态
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    resetExtensionState();
+  }
+});
+
+// 监听页面卸载，清理状态
+window.addEventListener('beforeunload', () => {
+  resetExtensionState();
+  // 清理防重复注入标记
+  // @ts-ignore TypeScript不识别自定义属性，但这是有效的JavaScript
+  delete window.__IMMERSIVE_TRANSLATE_LOADED__;
+});
+
+// 页面加载完成后自动初始化扩展
+document.addEventListener('DOMContentLoaded', async () => {
+  console.log('Page loaded, initializing extension...');
+  try {
+    await initializeExtension();
+  } catch (error) {
+    console.warn('Auto-initialization failed:', error);
+  }
+});
+
+// 如果页面已经加载完成，立即初始化
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', async () => {
+    console.log('Page loaded, initializing extension...');
+    try {
+      await initializeExtension();
+    } catch (error) {
+      console.warn('Auto-initialization failed:', error);
+    }
+  });
+} else {
+  // 页面已经加载完成，立即初始化
+  console.log('Page already loaded, initializing extension...');
+  initializeExtension().catch(error => {
+    console.warn('Auto-initialization failed:', error);
+  });
+}
 
 // 创建 Shadow DOM 容器
 function createShadowContainer(): ShadowRoot {
@@ -57,11 +165,11 @@ function createShadowContainer(): ShadowRoot {
   `;
 
   shadowRoot = container.attachShadow({ mode: 'open' });
-  
+
   // 加载样式
   const styleLink = document.createElement('link');
   styleLink.rel = 'stylesheet';
-  styleLink.href = chrome.runtime.getURL('src/content/contentStyle.css');
+  styleLink.href = chrome.runtime.getURL('contentStyle.css');
   shadowRoot.appendChild(styleLink);
 
   document.documentElement.appendChild(container);
@@ -71,33 +179,124 @@ function createShadowContainer(): ShadowRoot {
 // 与 Service Worker 通信
 async function sendMessage(type: string, payload: any): Promise<TranslationResult> {
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ type, payload }, (response) => {
-      if (chrome.runtime.lastError) {
+    try {
+      // 检查扩展上下文是否有效
+      if (!chrome.runtime?.sendMessage) {
+        console.warn("Chrome runtime not available");
         resolve({
           ok: false,
           error: {
-            code: 'RUNTIME_ERROR',
-            message: chrome.runtime.lastError.message || 'Runtime error'
+            code: 'RUNTIME_UNAVAILABLE',
+            message: '运行时不可用'
           }
         });
-      } else {
-        resolve(response);
+        return;
       }
-    });
+
+      chrome.runtime.sendMessage({ type, payload }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.warn("Error sending message to service worker:", chrome.runtime.lastError.message);
+
+          // 检查是否是扩展上下文失效错误
+          if (chrome.runtime.lastError.message?.includes('Extension context invalidated')) {
+            resolve({
+              ok: false,
+              error: {
+                code: 'EXTENSION_CONTEXT_INVALIDATED',
+                message: '扩展上下文已失效，请刷新页面重试'
+              }
+            });
+          } else {
+            resolve({
+              ok: false,
+              error: {
+                code: 'RUNTIME_ERROR',
+                message: chrome.runtime.lastError.message || 'Runtime error'
+              }
+            });
+          }
+        } else {
+          resolve(response);
+        }
+      });
+    } catch (error: any) {
+      console.error("Failed to send message:", error);
+      resolve({
+        ok: false,
+        error: {
+          code: 'MESSAGE_SEND_ERROR',
+          message: error.message || '消息发送失败'
+        }
+      });
+    }
   });
+}
+
+// 检查扩展状态
+async function checkExtensionStatus(): Promise<boolean> {
+  try {
+    // 检查chrome.runtime是否可用
+    if (!chrome.runtime || !chrome.runtime.sendMessage) {
+      console.warn('Chrome runtime not available');
+      return false;
+    }
+
+    // 尝试发送一个简单的ping消息
+    const result = await sendMessage('ping', {});
+    return result.ok;
+  } catch (error) {
+    console.warn('Extension status check failed:', error);
+    return false;
+  }
 }
 
 // 翻译文本
 async function translateText(text: string, source: string = 'auto', target: string = 'zh'): Promise<TranslationResult> {
-  const payload = {
-    id: Date.now().toString(),
-    text: text.trim(),
-    source,
-    target,
-    format: 'text'
-  };
+  try {
+    // 首先初始化扩展
+    const isInitialized = await initializeExtension();
+    if (!isInitialized) {
+      return {
+        ok: false,
+        error: {
+          code: 'EXTENSION_NOT_READY',
+          message: '扩展未就绪，请点击重试按钮或刷新页面'
+        }
+      };
+    }
 
-  return await sendMessage('translate', payload);
+    const payload = {
+      id: Date.now().toString(),
+      text: text.trim(),
+      source,
+      target,
+      format: 'text'
+    };
+
+    const result = await sendMessage('translate', payload);
+
+    // 如果遇到扩展上下文失效错误，尝试重新初始化
+    if (!result.ok && result.error?.code === 'EXTENSION_CONTEXT_INVALIDATED') {
+      console.log('Extension context invalidated, attempting to reinitialize...');
+      resetExtensionState();
+      const reinitResult = await initializeExtension();
+      if (reinitResult) {
+        // 重新尝试翻译
+        return await sendMessage('translate', payload);
+      }
+    }
+
+    return result;
+  } catch (error: any) {
+    console.error('Translation failed:', error);
+    return {
+      ok: false,
+      error: {
+        code: 'TRANSLATION_ERROR',
+        message: error.message || '翻译失败'
+      }
+    };
+  }
 }
 
 // 创建翻译气泡
@@ -109,7 +308,7 @@ function createTranslationBubble(): TranslationBubble {
     if (text.length < 1 || text.length > 1000) return;
 
     const shadow = createShadowContainer();
-    
+
     // 移除旧气泡
     if (bubble) {
       bubble.remove();
@@ -199,38 +398,38 @@ function createTranslationBubble(): TranslationBubble {
 function bindDragEvents(bubble: HTMLDivElement) {
   let isDragging = false;
   let offsetX = 0, offsetY = 0;
-  
+
   const bubbleHeader = bubble.querySelector('.bubble-header') as HTMLElement;
   if (!bubbleHeader) return;
-  
+
   bubbleHeader.addEventListener('mousedown', (e) => {
     // 只有在标题栏上按下才触发拖动
     isDragging = true;
     const rect = bubble.getBoundingClientRect();
     offsetX = e.clientX - rect.left;
     offsetY = e.clientY - rect.top;
-    
+
     // 防止文本选择
     e.preventDefault();
   });
-  
+
   document.addEventListener('mousemove', (e) => {
     if (!isDragging) return;
-    
+
     const x = e.clientX - offsetX;
     const y = e.clientY - offsetY;
-    
+
     bubble.style.left = `${x}px`;
     bubble.style.top = `${y}px`;
     bubble.style.transform = 'none'; // 移除原有的变换
-    
+
     // 隐藏箭头
     const arrow = bubble.querySelector('.bubble-arrow') as HTMLElement;
     if (arrow) {
       arrow.style.display = 'none';
     }
   });
-  
+
   document.addEventListener('mouseup', () => {
     isDragging = false;
   });
@@ -275,6 +474,12 @@ function bindBubbleEvents(bubble: HTMLDivElement, selection: Selection, original
   });
 
   retryBtn?.addEventListener('click', async () => {
+    // 检查bubble是否仍然存在
+    if (!bubble || !document.contains(bubble)) {
+      console.warn('Bubble no longer exists, skipping retry');
+      return;
+    }
+    
     showBubbleLoading(bubble);
     try {
       const result = await translateText(originalText);
@@ -286,11 +491,23 @@ function bindBubbleEvents(bubble: HTMLDivElement, selection: Selection, original
 }
 
 // 更新气泡内容
-function updateBubbleContent(bubble: HTMLDivElement, result: TranslationResult) {
+function updateBubbleContent(bubble: HTMLDivElement | null, result: TranslationResult) {
+  // 检查bubble是否存在
+  if (!bubble) {
+    console.warn('Bubble is null, cannot update content');
+    return;
+  }
+
   const loadingEl = bubble.querySelector('.translation-loading') as HTMLDivElement;
   const resultEl = bubble.querySelector('.translation-result') as HTMLDivElement;
   const errorEl = bubble.querySelector('.bubble-error') as HTMLDivElement;
   const translatedTextEl = bubble.querySelector('.translated-text') as HTMLDivElement;
+
+  // 检查所有必需的元素是否存在
+  if (!loadingEl || !resultEl || !errorEl || !translatedTextEl) {
+    console.warn('Required bubble elements not found for content update');
+    return;
+  }
 
   loadingEl.style.display = 'none';
   errorEl.style.display = 'none';
@@ -316,14 +533,14 @@ function updateBubbleContent(bubble: HTMLDivElement, result: TranslationResult) 
       backdropFilter: 'blur(1px)',
       border: '1px solid rgba(0, 0, 0, 0.1)',
     });
-    
+
     // 检测暗色模式
     if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
       bubbleDiv.style.backgroundColor = 'rgba(30, 30, 30, 0.95)';
       bubbleDiv.style.color = '#fff';
       bubbleDiv.style.border = '1px solid rgba(255, 255, 255, 0.1)';
     }
-    
+
     // 清空原来的translatedTextEl并添加新的包装元素
     translatedTextEl.innerHTML = '';
     translatedTextEl.appendChild(bubbleDiv);
@@ -334,22 +551,54 @@ function updateBubbleContent(bubble: HTMLDivElement, result: TranslationResult) 
 }
 
 // 显示气泡加载状态
-function showBubbleLoading(bubble: HTMLDivElement) {
-  const loadingEl = bubble.querySelector('.translation-loading') as HTMLDivElement;
-  const resultEl = bubble.querySelector('.translation-result') as HTMLDivElement;
-  const errorEl = bubble.querySelector('.bubble-error') as HTMLDivElement;
+function showBubbleLoading(bubble: HTMLDivElement | null) {
+  // 检查bubble是否存在
+  if (!bubble) {
+    console.warn('Bubble is null, cannot show loading');
+    return;
+  }
 
-  loadingEl.style.display = 'block';
-  resultEl.style.display = 'none';
-  errorEl.style.display = 'none';
+  // 检查bubble是否仍在DOM中
+  if (!document.contains(bubble)) {
+    console.warn('Bubble is no longer in DOM, cannot show loading');
+    return;
+  }
+
+  // 使用可选链操作符安全地查询元素
+  const loadingEl = bubble.querySelector('.translation-loading') as HTMLDivElement | null;
+  const resultEl = bubble.querySelector('.translation-result') as HTMLDivElement | null;
+  const errorEl = bubble.querySelector('.bubble-error') as HTMLDivElement | null;
+
+  // 检查所有必需的元素是否存在
+  if (!loadingEl || !resultEl || !errorEl) {
+    console.warn('Required bubble elements not found for loading');
+    return;
+  }
+
+  // 安全地设置样式
+  if (loadingEl) loadingEl.style.display = 'block';
+  if (resultEl) resultEl.style.display = 'none';
+  if (errorEl) errorEl.style.display = 'none';
 }
 
 // 显示气泡错误
-function showBubbleError(bubble: HTMLDivElement, message: string) {
+function showBubbleError(bubble: HTMLDivElement | null, message: string) {
+  // 检查bubble是否存在
+  if (!bubble) {
+    console.warn('Bubble is null, cannot show error:', message);
+    return;
+  }
+
   const loadingEl = bubble.querySelector('.translation-loading') as HTMLDivElement;
   const resultEl = bubble.querySelector('.translation-result') as HTMLDivElement;
   const errorEl = bubble.querySelector('.bubble-error') as HTMLDivElement;
   const errorMessageEl = bubble.querySelector('.error-message') as HTMLSpanElement;
+
+  // 检查所有必需的元素是否存在
+  if (!loadingEl || !resultEl || !errorEl || !errorMessageEl) {
+    console.warn('Required bubble elements not found');
+    return;
+  }
 
   loadingEl.style.display = 'none';
   resultEl.style.display = 'none';
@@ -507,7 +756,7 @@ function getSelectionInfo(): { text: string; rect: DOMRect } | null {
 
   const range = selection.getRangeAt(0);
   const rect = range.getBoundingClientRect();
-  
+
   return { text, rect };
 }
 
@@ -545,7 +794,7 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
     translationBubble.hide();
   }
-  
+
   // Ctrl+Shift+Y 开启沉浸式模式
   if (event.ctrlKey && event.shiftKey && event.key === 'Y') {
     event.preventDefault();

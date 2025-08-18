@@ -1,6 +1,71 @@
 let shadowRoot = null;
 let isImmersiveMode = false;
 let currentSelection = null;
+let extensionInitialized = false;
+let retryCount = 0;
+const MAX_RETRY_COUNT = 3;
+async function initializeExtension() {
+  try {
+    if (extensionInitialized) return true;
+    const isReady = await checkExtensionStatus();
+    if (isReady) {
+      extensionInitialized = true;
+      retryCount = 0;
+      console.log("Extension initialized successfully");
+      return true;
+    } else {
+      throw new Error("Extension not ready");
+    }
+  } catch (error) {
+    console.warn("Extension initialization failed:", error);
+    retryCount++;
+    if (retryCount < MAX_RETRY_COUNT) {
+      await new Promise((resolve) => setTimeout(resolve, 1e3));
+      return initializeExtension();
+    } else {
+      console.error("Extension initialization failed after max retries");
+      extensionInitialized = false;
+      retryCount = 0;
+      return false;
+    }
+  }
+}
+function resetExtensionState() {
+  extensionInitialized = false;
+  retryCount = 0;
+  console.log("Extension state reset");
+}
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    resetExtensionState();
+  }
+});
+window.addEventListener("beforeunload", () => {
+  resetExtensionState();
+});
+document.addEventListener("DOMContentLoaded", async () => {
+  console.log("Page loaded, initializing extension...");
+  try {
+    await initializeExtension();
+  } catch (error) {
+    console.warn("Auto-initialization failed:", error);
+  }
+});
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", async () => {
+    console.log("Page loaded, initializing extension...");
+    try {
+      await initializeExtension();
+    } catch (error) {
+      console.warn("Auto-initialization failed:", error);
+    }
+  });
+} else {
+  console.log("Page already loaded, initializing extension...");
+  initializeExtension().catch((error) => {
+    console.warn("Auto-initialization failed:", error);
+  });
+}
 function createShadowContainer() {
   if (shadowRoot) return shadowRoot;
   const container = document.createElement("div");
@@ -15,37 +80,102 @@ function createShadowContainer() {
   shadowRoot = container.attachShadow({ mode: "open" });
   const styleLink = document.createElement("link");
   styleLink.rel = "stylesheet";
-  styleLink.href = chrome.runtime.getURL("src/content/contentStyle.css");
+  styleLink.href = chrome.runtime.getURL("contentStyle.css");
   shadowRoot.appendChild(styleLink);
   document.documentElement.appendChild(container);
   return shadowRoot;
 }
 async function sendMessage(type, payload) {
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ type, payload }, (response) => {
-      if (chrome.runtime.lastError) {
-        resolve({
-          ok: false,
-          error: {
-            code: "RUNTIME_ERROR",
-            message: chrome.runtime.lastError.message || "Runtime error"
+    try {
+      chrome.runtime.sendMessage({ type, payload }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.warn("Error sending message to service worker:", chrome.runtime.lastError.message);
+          if (chrome.runtime.lastError.message?.includes("Extension context invalidated")) {
+            resolve({
+              ok: false,
+              error: {
+                code: "EXTENSION_CONTEXT_INVALIDATED",
+                message: "扩展上下文已失效，请刷新页面重试"
+              }
+            });
+          } else {
+            resolve({
+              ok: false,
+              error: {
+                code: "RUNTIME_ERROR",
+                message: chrome.runtime.lastError.message || "Runtime error"
+              }
+            });
           }
-        });
-      } else {
-        resolve(response);
-      }
-    });
+        } else {
+          resolve(response);
+        }
+      });
+    } catch (error) {
+      console.error("Failed to send message:", error);
+      resolve({
+        ok: false,
+        error: {
+          code: "MESSAGE_SEND_ERROR",
+          message: error.message || "消息发送失败"
+        }
+      });
+    }
   });
 }
+async function checkExtensionStatus() {
+  try {
+    if (!chrome.runtime || !chrome.runtime.sendMessage) {
+      console.warn("Chrome runtime not available");
+      return false;
+    }
+    const result = await sendMessage("ping", {});
+    return result.ok;
+  } catch (error) {
+    console.warn("Extension status check failed:", error);
+    return false;
+  }
+}
 async function translateText(text, source = "auto", target = "zh") {
-  const payload = {
-    id: Date.now().toString(),
-    text: text.trim(),
-    source,
-    target,
-    format: "text"
-  };
-  return await sendMessage("translate", payload);
+  try {
+    const isInitialized = await initializeExtension();
+    if (!isInitialized) {
+      return {
+        ok: false,
+        error: {
+          code: "EXTENSION_NOT_READY",
+          message: "扩展未就绪，请点击重试按钮或刷新页面"
+        }
+      };
+    }
+    const payload = {
+      id: Date.now().toString(),
+      text: text.trim(),
+      source,
+      target,
+      format: "text"
+    };
+    const result = await sendMessage("translate", payload);
+    if (!result.ok && result.error?.code === "EXTENSION_CONTEXT_INVALIDATED") {
+      console.log("Extension context invalidated, attempting to reinitialize...");
+      resetExtensionState();
+      const reinitResult = await initializeExtension();
+      if (reinitResult) {
+        return await sendMessage("translate", payload);
+      }
+    }
+    return result;
+  } catch (error) {
+    console.error("Translation failed:", error);
+    return {
+      ok: false,
+      error: {
+        code: "TRANSLATION_ERROR",
+        message: error.message || "翻译失败"
+      }
+    };
+  }
 }
 function createTranslationBubble() {
   let bubble = null;
@@ -94,11 +224,12 @@ function createTranslationBubble() {
     shadow.appendChild(bubble);
     isVisible = true;
     bindBubbleEvents(bubble, selection, text);
+    bindDragEvents(bubble);
     try {
       const result = await translateText(text);
       updateBubbleContent(bubble, result);
     } catch (error) {
-      showBubbleError(bubble, error.message);
+      showBubbleError(bubble, error.message || "未知错误");
     }
     setTimeout(() => {
       document.addEventListener("click", handleOutsideClick, true);
@@ -118,6 +249,34 @@ function createTranslationBubble() {
     }
   };
   return { show, hide, isVisible: () => isVisible };
+}
+function bindDragEvents(bubble) {
+  let isDragging2 = false;
+  let offsetX = 0, offsetY = 0;
+  const bubbleHeader = bubble.querySelector(".bubble-header");
+  if (!bubbleHeader) return;
+  bubbleHeader.addEventListener("mousedown", (e) => {
+    isDragging2 = true;
+    const rect = bubble.getBoundingClientRect();
+    offsetX = e.clientX - rect.left;
+    offsetY = e.clientY - rect.top;
+    e.preventDefault();
+  });
+  document.addEventListener("mousemove", (e) => {
+    if (!isDragging2) return;
+    const x = e.clientX - offsetX;
+    const y = e.clientY - offsetY;
+    bubble.style.left = `${x}px`;
+    bubble.style.top = `${y}px`;
+    bubble.style.transform = "none";
+    const arrow = bubble.querySelector(".bubble-arrow");
+    if (arrow) {
+      arrow.style.display = "none";
+    }
+  });
+  document.addEventListener("mouseup", () => {
+    isDragging2 = false;
+  });
 }
 function bindBubbleEvents(bubble, selection, originalText) {
   const closeBtn = bubble.querySelector(".btn-close");
@@ -151,42 +310,99 @@ function bindBubbleEvents(bubble, selection, originalText) {
     openImmersiveMode(originalText);
   });
   retryBtn?.addEventListener("click", async () => {
+    if (!bubble || !document.contains(bubble)) {
+      console.warn("Bubble no longer exists, skipping retry");
+      return;
+    }
     showBubbleLoading(bubble);
     try {
       const result = await translateText(originalText);
       updateBubbleContent(bubble, result);
     } catch (error) {
-      showBubbleError(bubble, error.message);
+      showBubbleError(bubble, error.message || "未知错误");
     }
   });
 }
 function updateBubbleContent(bubble, result) {
+  if (!bubble) {
+    console.warn("Bubble is null, cannot update content");
+    return;
+  }
   const loadingEl = bubble.querySelector(".translation-loading");
   const resultEl = bubble.querySelector(".translation-result");
   const errorEl = bubble.querySelector(".bubble-error");
   const translatedTextEl = bubble.querySelector(".translated-text");
+  if (!loadingEl || !resultEl || !errorEl || !translatedTextEl) {
+    console.warn("Required bubble elements not found for content update");
+    return;
+  }
   loadingEl.style.display = "none";
   errorEl.style.display = "none";
   if (result.ok && result.data) {
-    translatedTextEl.textContent = result.data.translatedText;
+    const bubbleDiv = document.createElement("div");
+    bubbleDiv.textContent = result.data.translatedText;
+    Object.assign(bubbleDiv.style, {
+      backgroundColor: "#f9f9f9",
+      color: "#000",
+      borderRadius: "8px",
+      padding: "8px",
+      boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
+      fontSize: "14px",
+      lineHeight: "1.6",
+      maxWidth: "300px",
+      wordWrap: "break-word",
+      whiteSpace: "pre-wrap",
+      zIndex: "999999",
+      display: "inline-block",
+      pointerEvents: "none",
+      backdropFilter: "blur(1px)",
+      border: "1px solid rgba(0, 0, 0, 0.1)"
+    });
+    if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      bubbleDiv.style.backgroundColor = "rgba(30, 30, 30, 0.95)";
+      bubbleDiv.style.color = "#fff";
+      bubbleDiv.style.border = "1px solid rgba(255, 255, 255, 0.1)";
+    }
+    translatedTextEl.innerHTML = "";
+    translatedTextEl.appendChild(bubbleDiv);
     resultEl.style.display = "block";
   } else {
     showBubbleError(bubble, result.error?.message || "翻译失败");
   }
 }
 function showBubbleLoading(bubble) {
+  if (!bubble) {
+    console.warn("Bubble is null, cannot show loading");
+    return;
+  }
+  if (!document.contains(bubble)) {
+    console.warn("Bubble is no longer in DOM, cannot show loading");
+    return;
+  }
   const loadingEl = bubble.querySelector(".translation-loading");
   const resultEl = bubble.querySelector(".translation-result");
   const errorEl = bubble.querySelector(".bubble-error");
-  loadingEl.style.display = "block";
-  resultEl.style.display = "none";
-  errorEl.style.display = "none";
+  if (!loadingEl || !resultEl || !errorEl) {
+    console.warn("Required bubble elements not found for loading");
+    return;
+  }
+  if (loadingEl) loadingEl.style.display = "block";
+  if (resultEl) resultEl.style.display = "none";
+  if (errorEl) errorEl.style.display = "none";
 }
 function showBubbleError(bubble, message) {
+  if (!bubble) {
+    console.warn("Bubble is null, cannot show error:", message);
+    return;
+  }
   const loadingEl = bubble.querySelector(".translation-loading");
   const resultEl = bubble.querySelector(".translation-result");
   const errorEl = bubble.querySelector(".bubble-error");
   const errorMessageEl = bubble.querySelector(".error-message");
+  if (!loadingEl || !resultEl || !errorEl || !errorMessageEl) {
+    console.warn("Required bubble elements not found");
+    return;
+  }
   loadingEl.style.display = "none";
   resultEl.style.display = "none";
   errorMessageEl.textContent = message;
@@ -316,7 +532,7 @@ function getSelectionInfo() {
   return { text, rect };
 }
 const translationBubble = createTranslationBubble();
-document.addEventListener("mouseup", (event) => {
+document.addEventListener("mouseup", () => {
   setTimeout(() => {
     const selectionInfo = getSelectionInfo();
     if (selectionInfo) {
@@ -327,7 +543,7 @@ document.addEventListener("mouseup", (event) => {
     }
   }, 100);
 });
-document.addEventListener("dblclick", (event) => {
+document.addEventListener("dblclick", () => {
   setTimeout(() => {
     const selectionInfo = getSelectionInfo();
     if (selectionInfo) {
@@ -349,7 +565,7 @@ document.addEventListener("keydown", (event) => {
     }
   }
 });
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, _sender) => {
   if (message.type === "toggleImmersive") {
     const selectionInfo = getSelectionInfo();
     if (selectionInfo) {

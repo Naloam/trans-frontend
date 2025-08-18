@@ -34,10 +34,6 @@ interface SentenceTranslation {
   isExpanded: boolean;
 }
 
-interface TermMapping {
-  [key: string]: string;
-}
-
 type DisplayMode = 'side-by-side' | 'overlay' | 'inline';
 
 // Mock 翻译数据（离线开发使用）
@@ -65,7 +61,6 @@ const ImmersiveOverlay: React.FC<ImmersiveOverlayProps> = ({
   const [displayMode, setDisplayMode] = useState<DisplayMode>('side-by-side');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [termMappings, setTermMappings] = useState<TermMapping>({});
   const [selectedSentence, setSelectedSentence] = useState<number>(-1);
   
   // Refs
@@ -96,7 +91,14 @@ const ImmersiveOverlay: React.FC<ImmersiveOverlayProps> = ({
             target: 'zh',
             format: 'text'
           }
-        }, resolve);
+        }, (result) => {
+          if (chrome.runtime.lastError) {
+            console.warn("Error sending message to service worker:", chrome.runtime.lastError.message);
+            resolve(null);
+            return;
+          }
+          resolve(result);
+        });
       });
 
       if (response?.ok && response.data) {
@@ -123,15 +125,6 @@ const ImmersiveOverlay: React.FC<ImmersiveOverlayProps> = ({
     ];
   }, [detected]);
 
-  // 应用术语映射
-  const applyTermMappings = useCallback((text: string, mappings: TermMapping): string => {
-    let result = text;
-    Object.entries(mappings).forEach(([original, translated]) => {
-      const regex = new RegExp(`\\b${original}\\b`, 'gi');
-      result = result.replace(regex, translated);
-    });
-    return result;
-  }, []);
 
   // 初始化翻译
   useEffect(() => {
@@ -143,19 +136,14 @@ const ImmersiveOverlay: React.FC<ImmersiveOverlayProps> = ({
         const sentenceList = splitIntoSentences(original);
         const translations: SentenceTranslation[] = [];
 
-        // 从 sessionStorage 加载术语映射
-        const savedMappings = sessionStorage.getItem('immersive-translate-terms');
-        const mappings = savedMappings ? JSON.parse(savedMappings) : {};
-        setTermMappings(mappings);
-
         // 逐句翻译
         for (const sentence of sentenceList) {
           const candidates = await translateSentence(sentence);
           
-          // 应用术语映射
+          // 应用术语映射（目前没有实际的术语映射逻辑）
           const mappedCandidates = candidates.map(candidate => ({
             ...candidate,
-            text: applyTermMappings(candidate.text, mappings)
+            text: candidate.text // 移除了 applyTermMappings 调用
           }));
 
           translations.push({
@@ -175,7 +163,7 @@ const ImmersiveOverlay: React.FC<ImmersiveOverlayProps> = ({
     };
 
     initializeTranslation();
-  }, [original, splitIntoSentences, translateSentence, applyTermMappings]);
+  }, [original, splitIntoSentences, translateSentence]);
 
   // 键盘事件处理
   useEffect(() => {
@@ -220,12 +208,6 @@ const ImmersiveOverlay: React.FC<ImmersiveOverlayProps> = ({
     ));
   }, []);
 
-  // 保存术语映射
-  const saveTermMapping = useCallback((original: string, translated: string) => {
-    const newMappings = { ...termMappings, [original]: translated };
-    setTermMappings(newMappings);
-    sessionStorage.setItem('immersive-translate-terms', JSON.stringify(newMappings));
-  }, [termMappings]);
 
   // 复制全部译文
   const copyAllTranslations = useCallback(() => {

@@ -2,11 +2,20 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'fs';
+import { viteStaticCopy } from 'vite-plugin-static-copy';
 
 export default defineConfig({
   plugins: [
     react(),
-    // 复制 manifest.json 和图标到 dist 目录
+    
+    // 新增：把 contentStyle.css 拷贝到 dist 根目录
+    viteStaticCopy({
+      targets: [
+        { src: 'src/content/contentStyle.css', dest: '.' } // => dist/contentStyle.css
+      ]
+    }),
+    
+    // 保留：原有的 manifest & icons 拷贝逻辑
     {
       name: 'copy-assets',
       writeBundle() {

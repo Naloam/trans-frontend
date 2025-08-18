@@ -72,12 +72,16 @@ const Popup: React.FC = () => {
   const [alternatives, setAlternatives] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState('gpt-4o'); // 默认选择OpenAI模型
   const [selectedIdentity, setSelectedIdentity] = useState('通用专家'); // 默认选择通用专家
+  const [isImageTranslationEnabled, setIsImageTranslationEnabled] = useState(true);
+  const [isDocumentTranslationEnabled, setIsDocumentTranslationEnabled] = useState(true);
 
   // 从存储加载设置
   useEffect(() => {
-    chrome.storage.local.get(['defaultSourceLang', 'defaultTargetLang'], (result) => {
+    chrome.storage.local.get(['defaultSourceLang', 'defaultTargetLang', 'enableImageTranslation', 'enableDocumentTranslation'], (result) => {
       if (result.defaultSourceLang) setSourceLang(result.defaultSourceLang);
       if (result.defaultTargetLang) setTargetLang(result.defaultTargetLang);
+      if (result.enableImageTranslation !== undefined) setIsImageTranslationEnabled(result.enableImageTranslation);
+      if (result.enableDocumentTranslation !== undefined) setIsDocumentTranslationEnabled(result.enableDocumentTranslation);
     });
   }, []);
 
@@ -141,6 +145,45 @@ const Popup: React.FC = () => {
       setIsLoading(false);
     }
   }, [inputText, sourceLang, targetLang]);
+
+  // 处理文件选择
+  const handleFileSelect = useCallback((accept: string, type: 'image' | 'document') => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = accept;
+    input.onchange = (event) => {
+      const file = (event.target as HTMLInputElement).files?.[0];
+      if (file) {
+        // 发送文件到Service Worker处理
+        const reader = new FileReader();
+        reader.onload = () => {
+          chrome.runtime.sendMessage({
+            type: type === 'image' ? 'translateImage' : 'translateDocument',
+            payload: {
+              file: reader.result,
+              fileName: file.name,
+              fileType: file.type
+            }
+          }, (response) => {
+            if (chrome.runtime.lastError) {
+              console.warn("Error sending message to service worker:", chrome.runtime.lastError.message);
+              setError('发送消息到后台服务时出错');
+              return;
+            }
+            
+            if (response.ok) {
+              setTranslatedText(response.data.translatedText);
+            } else {
+              setError(response.error?.message || '文件翻译失败');
+            }
+          });
+        };
+        reader.readAsArrayBuffer(file);
+      }
+    };
+    input.click();
+  }, []);
+
 
   // 交换语言
   const handleSwapLanguages = useCallback(() => {
@@ -318,6 +361,34 @@ const Popup: React.FC = () => {
         >
           {isLoading ? '翻译中...' : '翻译'}
         </button>
+
+        {/* 图片翻译和文档翻译按钮 */}
+        <div className="flex space-x-2">
+          <button
+            onClick={() => handleFileSelect('image/*', 'image')}
+            disabled={!isImageTranslationEnabled}
+            className={`flex-1 py-2 px-4 rounded font-medium transition-colors ${
+              isImageTranslationEnabled 
+                ? 'bg-purple-600 text-white hover:bg-purple-700' 
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            }`}
+            type="button"
+          >
+            图片翻译
+          </button>
+          <button
+            onClick={() => handleFileSelect('.txt,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'document')}
+            disabled={!isDocumentTranslationEnabled}
+            className={`flex-1 py-2 px-4 rounded font-medium transition-colors ${
+              isDocumentTranslationEnabled 
+                ? 'bg-indigo-600 text-white hover:bg-indigo-700' 
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            }`}
+            type="button"
+          >
+            文件翻译
+          </button>
+        </div>
 
         {/* 错误信息 */}
         {error && (
