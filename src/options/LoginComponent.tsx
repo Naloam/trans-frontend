@@ -27,7 +27,12 @@ const LoginComponent: React.FC = () => {
     setError(null);
 
     try {
-      const response = await fetch('http://localhost:8000/user/login', {
+      console.log('发送登录请求:', {
+        username: formData.username,
+        password: formData.password
+      });
+
+      const response = await fetch('http://2648d4f4.r22.cpolar.top/user/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -38,15 +43,33 @@ const LoginComponent: React.FC = () => {
         }),
       });
 
-      const data = await response.json();
+      console.log('响应状态:', response.status, response.statusText);
+      console.log('响应头:', Object.fromEntries(response.headers.entries()));
+
+      // 检查响应内容类型
+      const contentType = response.headers.get('Content-Type');
+      console.log('Content-Type:', contentType);
+
+      let data;
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        // 如果不是JSON，读取文本内容
+        const textData = await response.text();
+        console.log('非JSON响应内容:', textData);
+        throw new Error(`服务器返回非JSON响应: ${textData.substring(0, 100)}...`);
+      }
+
+      console.log('响应数据:', data);
 
       if (!response.ok) {
-        throw new Error(data.detail || '登录失败');
+        throw new Error(data.detail || data.message || `HTTP ${response.status}: ${response.statusText}`);
       }
 
       console.log('登录成功:', data);
       // 后续会在这里处理 token 存储
     } catch (err: any) {
+      console.error('登录错误详情:', err);
       setError(err.message || '登录过程中发生错误');
       console.error('登录错误:', err);
     } finally {

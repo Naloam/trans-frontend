@@ -129,7 +129,7 @@ class StableTranslationService {
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
 
     try {
-      const response = await fetch('https://2648d4f4.r22.cpolar.top/translate', {
+      const response = await fetch('http://2648d4f4.r22.cpolar.top/translate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

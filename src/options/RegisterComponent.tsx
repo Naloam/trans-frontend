@@ -36,7 +36,13 @@ const RegisterComponent: React.FC = () => {
     setError(null);
 
     try {
-      const response = await fetch('http://localhost:8000/user/register', {
+      console.log('发送注册请求:', {
+        username: formData.username,
+        password: formData.password,
+        confirm_password: formData.confirmPassword
+      });
+
+      const response = await fetch('http://2648d4f4.r22.cpolar.top/user/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -48,15 +54,33 @@ const RegisterComponent: React.FC = () => {
         }),
       });
 
-      const data = await response.json();
+      console.log('响应状态:', response.status, response.statusText);
+      console.log('响应头:', Object.fromEntries(response.headers.entries()));
+
+      // 检查响应内容类型
+      const contentType = response.headers.get('Content-Type');
+      console.log('Content-Type:', contentType);
+
+      let data;
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        // 如果不是JSON，读取文本内容
+        const textData = await response.text();
+        console.log('非JSON响应内容:', textData);
+        throw new Error(`服务器返回非JSON响应: ${textData.substring(0, 100)}...`);
+      }
+
+      console.log('响应数据:', data);
 
       if (!response.ok) {
-        throw new Error(data.detail || '注册失败');
+        throw new Error(data.detail || data.message || `HTTP ${response.status}: ${response.statusText}`);
       }
 
       console.log('注册成功:', data);
       // 后续会在这里处理注册成功后的逻辑
     } catch (err: any) {
+      console.error('注册错误详情:', err);
       setError(err.message || '注册过程中发生错误');
       console.error('注册错误:', err);
     } finally {

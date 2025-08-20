@@ -100,7 +100,7 @@ class StableTranslationService {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 1e4);
     try {
-      const response = await fetch("https://2648d4f4.r22.cpolar.top/translate", {
+      const response = await fetch("http://2648d4f4.r22.cpolar.top/translate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
