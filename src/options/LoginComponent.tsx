@@ -5,7 +5,21 @@ interface LoginFormData {
   password: string;
 }
 
-const LoginComponent: React.FC = () => {
+interface User {
+  id: string; // UUID格式，所以是string类型
+  username: string;
+}
+
+interface LoginResponse {
+  message: string;
+  user: User;
+}
+
+interface ErrorResponse {
+  detail?: string;
+}
+
+const LoginComponent: React.FC<{ onLoginSuccess?: () => void }> = ({ onLoginSuccess }) => {
   const [formData, setFormData] = useState<LoginFormData>({
     username: '',
     password: ''
@@ -27,7 +41,8 @@ const LoginComponent: React.FC = () => {
     setError(null);
 
     try {
-      const response = await fetch('http://localhost:8000/user/login', {
+      const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:8000';
+      const response = await fetch(`${backendUrl}/user/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -41,11 +56,22 @@ const LoginComponent: React.FC = () => {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.detail || '登录失败');
+        const errorData = data as ErrorResponse;
+        throw new Error(errorData.detail || '登录失败');
       }
 
-      console.log('登录成功:', data);
-      // 后续会在这里处理 token 存储
+      const loginData = data as LoginResponse;
+
+      // 存储用户信息到localStorage
+      localStorage.setItem('user', JSON.stringify(loginData.user));
+      localStorage.setItem('username', loginData.user.username);
+      
+      console.log('登录成功:', loginData);
+      
+      // 调用登录成功回调
+      if (onLoginSuccess) {
+        onLoginSuccess();
+      }
     } catch (err: any) {
       setError(err.message || '登录过程中发生错误');
       console.error('登录错误:', err);

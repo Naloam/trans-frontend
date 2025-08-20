@@ -129,7 +129,20 @@ class StableTranslationService {
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
 
     try {
-      const response = await fetch('https://2648d4f4.r22.cpolar.top/translate', {
+      // 获取当前登录用户的ID
+      let userId: string | null = null;
+      try {
+        const userStr = localStorage.getItem('user');
+        if (userStr) {
+          const user = JSON.parse(userStr);
+          userId = user.id || null;
+        }
+      } catch (e) {
+        console.error('解析用户信息失败:', e);
+      }
+
+      const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:8000';
+      const response = await fetch(`${backendUrl}/translate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -141,7 +154,7 @@ class StableTranslationService {
             text: text,
             model: 'qwen-turbo-latest'
           }],
-          user_id: null,
+          user_id: userId, // 添加用户ID
           extra_args: null
         }),
         signal: controller.signal
@@ -157,6 +170,11 @@ class StableTranslationService {
       console.log('Backend response:', result);
 
       const segment = result.segments?.[0];
+
+      // 翻译成功后记录单词
+      if (segment?.text) {
+        await this.recordWords(segment.text);
+      }
 
       return {
         ok: true,
@@ -183,16 +201,31 @@ class StableTranslationService {
   }
 
   // 记录单词
-  async recordWords(text: string, userId: number = 1) {
+  async recordWords(text: string) {
     try {
-      const response = await fetch('https://2648d4f4.r22.cpolar.top/record-words', {
+      // 获取当前登录用户的ID
+      let userId: string | null = null;
+      try {
+        const userStr = localStorage.getItem('user');
+        if (userStr) {
+          const user = JSON.parse(userStr);
+          userId = user.id || null;
+        }
+      } catch (e) {
+        console.error('解析用户信息失败:', e);
+      }
+
+      const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:8000';
+      const response = await fetch(`${backendUrl}/word/record`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
+          user_id: userId, // UUID字符串
           text: text,
-          user_id: userId
+          target_language: "中文", // 默认目标语言
+          model_name: "qwen-turbo-latest" // 默认模型
         })
       });
 
@@ -296,8 +329,7 @@ chrome.runtime.onMessage.addListener((message: any, _sender: any, sendResponse: 
 
   if (message.type === 'recordWords') {
     stableTranslationService.recordWords(
-      message.payload.text,
-      message.payload.userId || 1
+      message.payload.text
     ).then(result => {
       sendResponse(result);
     }).catch(error => {
