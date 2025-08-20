@@ -231,7 +231,7 @@ class RequestManager {
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
 
     try {
-      const backendUrl = 'http://7ba3f9dd.r22.cpolar.top';
+      const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:8000';
       
       const response = await fetch(`${backendUrl}/translate`, {
         method: 'POST',

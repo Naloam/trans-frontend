@@ -27,7 +27,8 @@ const LoginComponent: React.FC = () => {
     setError(null);
 
     try {
-      const response = await fetch('http://localhost:8000/user/login', {
+      const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:8000';
+      const response = await fetch(`${backendUrl}/user/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

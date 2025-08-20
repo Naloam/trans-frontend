@@ -60,7 +60,7 @@ interface UserPreferences {
 }
 
 class MobileSyncService {
-  private readonly SYNC_API_BASE = 'http://localhost:8000';
+  private readonly SYNC_API_BASE = import.meta.env.BACKEND_URL || 'http://localhost:8000';
   private readonly SYNC_ENDPOINTS = {
     translations: '/sync/translations',
     vocabulary: '/sync/vocabulary', 

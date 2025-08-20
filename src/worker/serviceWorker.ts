@@ -129,7 +129,8 @@ class StableTranslationService {
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
 
     try {
-      const response = await fetch('https://2648d4f4.r22.cpolar.top/translate', {
+      const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:8000';
+      const response = await fetch(`${backendUrl}/translate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -185,7 +186,8 @@ class StableTranslationService {
   // 记录单词
   async recordWords(text: string, userId: number = 1) {
     try {
-      const response = await fetch('https://2648d4f4.r22.cpolar.top/record-words', {
+      const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:8000';
+      const response = await fetch(`${backendUrl}/record-words`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

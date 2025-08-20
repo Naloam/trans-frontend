@@ -36,7 +36,8 @@ const RegisterComponent: React.FC = () => {
     setError(null);
 
     try {
-      const response = await fetch('http://localhost:8000/user/register', {
+      const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:8000';
+      const response = await fetch(`${backendUrl}/user/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -111,7 +111,7 @@ async function fetchTranslation(request, retries = 2) {
                 }
             ]
         };
-        const backendUrl = "http://localhost:8000";
+        const backendUrl = process.env.BACKEND_URL || "http://localhost:8000";
         const response = await fetch(`${backendUrl}/translate`, {
             method: "POST",
             headers: {
