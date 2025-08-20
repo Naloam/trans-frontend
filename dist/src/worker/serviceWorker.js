@@ -112,7 +112,6 @@ class StableTranslationService {
             text,
             model: "qwen-turbo-latest"
           }],
-          user_id: null,
           extra_args: null
         }),
         signal: controller.signal
@@ -124,6 +123,9 @@ class StableTranslationService {
       const result = await response.json();
       console.log("Backend response:", result);
       const segment = result.segments?.[0];
+      if (segment?.text) {
+        await this.recordWords(segment.text);
+      }
       return {
         ok: true,
         data: {
@@ -145,7 +147,7 @@ class StableTranslationService {
     }
   }
   // 记录单词
-  async recordWords(text, userId = 1) {
+  async recordWords(text) {
     try {
       const response = await fetch("http://localhost:8000/record-words", {
         method: "POST",
@@ -154,7 +156,10 @@ class StableTranslationService {
         },
         body: JSON.stringify({
           text,
-          user_id: userId
+          target_language: "中文",
+          // 默认目标语言
+          model_name: "qwen-turbo-latest"
+          // 默认模型
         })
       });
       if (!response.ok) {
@@ -244,8 +249,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
   if (message.type === "recordWords") {
     stableTranslationService.recordWords(
-      message.payload.text,
-      message.payload.userId || 1
+      message.payload.text
     ).then((result) => {
       sendResponse(result);
     }).catch((error) => {

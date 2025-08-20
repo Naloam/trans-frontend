@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface RegisterFormData {
   username: string;
@@ -6,7 +6,26 @@ interface RegisterFormData {
   confirmPassword: string;
 }
 
-const RegisterComponent: React.FC = () => {
+interface User {
+  id: string; // UUID格式，所以是string类型
+  username: string;
+}
+
+interface RegisterResponse {
+  id: string;
+  username: string;
+}
+
+interface LoginResponse {
+  message: string;
+  user: User;
+}
+
+interface ErrorResponse {
+  detail?: string;
+}
+
+const RegisterComponent: React.FC<{ onRegisterSuccess?: () => void }> = ({ onRegisterSuccess }) => {
   const [formData, setFormData] = useState<RegisterFormData>({
     username: '',
     password: '',
@@ -14,6 +33,7 @@ const RegisterComponent: React.FC = () => {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -36,12 +56,6 @@ const RegisterComponent: React.FC = () => {
     setError(null);
 
     try {
-      console.log('发送注册请求:', {
-        username: formData.username,
-        password: formData.password,
-        confirm_password: formData.confirmPassword
-      });
-
       const response = await fetch('http://localhost:8000/user/register', {
         method: 'POST',
         headers: {
@@ -50,35 +64,64 @@ const RegisterComponent: React.FC = () => {
         body: JSON.stringify({
           username: formData.username,
           password: formData.password,
-          confirm_password: formData.confirmPassword
+          confirm_password: formData.confirmPassword // 注意：后端使用的是下划线格式
         }),
       });
 
-      console.log('响应状态:', response.status, response.statusText);
-      console.log('响应头:', Object.fromEntries(response.headers.entries()));
-
-      // 检查响应内容类型
-      const contentType = response.headers.get('Content-Type');
-      console.log('Content-Type:', contentType);
-
-      let data;
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
-      } else {
-        // 如果不是JSON，读取文本内容
-        const textData = await response.text();
-        console.log('非JSON响应内容:', textData);
-        throw new Error(`服务器返回非JSON响应: ${textData.substring(0, 100)}...`);
-      }
-
-      console.log('响应数据:', data);
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.detail || data.message || `HTTP ${response.status}: ${response.statusText}`);
+        const errorData = data as ErrorResponse;
+        throw new Error(errorData.detail || '注册失败');
       }
 
       console.log('注册成功:', data);
-      // 后续会在这里处理注册成功后的逻辑
+      
+      // 注册成功后自动登录
+      try {
+        const loginResponse = await fetch('http://localhost:8000/user/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            username: formData.username,
+            password: formData.password
+          }),
+        });
+
+        const loginData = await loginResponse.json();
+
+        if (!loginResponse.ok) {
+          const errorData = loginData as ErrorResponse;
+          throw new Error(errorData.detail || '自动登录失败');
+        }
+
+        const loginResult = loginData as LoginResponse;
+
+        // 存储用户信息到localStorage
+        localStorage.setItem('user', JSON.stringify(loginResult.user));
+        localStorage.setItem('username', loginResult.user.username);
+        
+        console.log('自动登录成功:', loginResult);
+        
+        // 存储用户信息到localStorage
+        localStorage.setItem('user', JSON.stringify(loginResult.user));
+        localStorage.setItem('username', loginResult.user.username);
+        
+        // 设置用户信息状态
+        setUser(loginResult.user);
+        
+        // 调用注册成功回调
+        if (onRegisterSuccess) {
+          onRegisterSuccess();
+        }
+        
+        // 跳转到首页或其他页面
+        window.location.href = '/'; // 可以根据实际路由修改这个跳转地址
+      } catch (loginError: any) {
+        throw new Error(`注册成功但登录失败: ${loginError.message}`);
+      }
     } catch (err: any) {
       console.error('注册错误详情:', err);
       setError(err.message || '注册过程中发生错误');
@@ -90,6 +133,15 @@ const RegisterComponent: React.FC = () => {
 
   return (
     <div className="flex min-h-full flex-1 flex-col justify-center px-6 py-12 lg:px-8">
+      {user && (
+        <div className="sm:mx-auto sm:w-full sm:max-w-sm mb-6">
+          <div className="rounded-md bg-green-50 p-4">
+            <div className="text-sm text-green-700">
+              欢迎，{user.username}！您的账户已成功创建。
+            </div>
+          </div>
+        </div>
+      )}
       <div className="sm:mx-auto sm:w-full sm:max-w-sm">
         <h2 className="mt-10 text-center text-2xl font-bold leading-9 tracking-tight text-gray-900 dark:text-white">
           创建新账户
