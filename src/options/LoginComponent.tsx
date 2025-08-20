@@ -32,7 +32,7 @@ const LoginComponent: React.FC = () => {
         password: formData.password
       });
 
-      const response = await fetch('http://2648d4f4.r22.cpolar.top/user/login', {
+      const response = await fetch('http://localhost:8000/user/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

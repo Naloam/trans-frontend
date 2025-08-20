@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "A powerful translation extension with inline tooltip and immersive overlay modes",
   "permissions": ["scripting","activeTab","storage","contextMenus","clipboardWrite","alarms"],
-  "host_permissions": ["https://api.example.com/*", "http://localhost:8000/*", "https://github.com/aimmetal-tech/*", "http://2648d4f4.r22.cpolar.top/*"],
+  "host_permissions": ["https://api.example.com/*", "http://localhost:8000/*", "https://github.com/aimmetal-tech/*"],
   "background": {
     "service_worker": "src/worker/serviceWorker.js"
   },

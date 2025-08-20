@@ -42,7 +42,7 @@ const RegisterComponent: React.FC = () => {
         confirm_password: formData.confirmPassword
       });
 
-      const response = await fetch('http://2648d4f4.r22.cpolar.top/user/register', {
+      const response = await fetch('http://localhost:8000/user/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
