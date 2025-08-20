@@ -202,12 +202,13 @@ class RequestManager {
     const [firstRequest] = requests;
     
     return {
-      target: firstRequest.target,
+      target: firstRequest.target === 'zh' ? '中文' : 'English',
       segments: requests.map(req => ({
         id: req.id,
         text: req.text,
         model: "qwen-turbo-latest"
       })),
+      user_id: null,
       extra_args: {
         batch_size: requests.length,
         context_aware: this.hasContextualRequests(requests)
@@ -230,7 +231,7 @@ class RequestManager {
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
 
     try {
-      const backendUrl = import.meta.env?.BACKEND_URL || 'http://localhost:8000';
+      const backendUrl = 'http://7ba3f9dd.r22.cpolar.top';
       
       const response = await fetch(`${backendUrl}/translate`, {
         method: 'POST',

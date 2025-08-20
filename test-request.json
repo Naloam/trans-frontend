@@ -1,0 +1,10 @@
+{
+  "target": "中文",
+  "segments": [
+    {
+      "id": "1",
+      "text": "Hello world",
+      "model": "qwen-turbo-latest"
+    }
+  ]
+}
