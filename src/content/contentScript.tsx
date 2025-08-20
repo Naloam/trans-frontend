@@ -340,9 +340,9 @@ async function addToVocabulary(originalText: string, translatedText: string, con
 }
 
 // 记录单词到后端
-async function recordWords(text: string, userId: number = 1): Promise<void> {
+async function recordWords(text: string): Promise<void> {
   try {
-    const result = await sendMessage('recordWords', { text, userId });
+    const result = await sendMessage('recordWords', { text });
     
     if (!result.ok) {
       throw new Error(result.error?.message || '记录单词失败');
