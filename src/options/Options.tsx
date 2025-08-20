@@ -3,7 +3,6 @@
  * React 应用入口文件
  */
 
-import React from 'react';
 import { createRoot } from 'react-dom/client';
 import OptionsComponent from './OptionsComponent';
 import '../styles/tailwind.css'; // Tailwind CSS 样式

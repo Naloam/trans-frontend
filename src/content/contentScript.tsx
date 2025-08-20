@@ -299,6 +299,57 @@ async function translateText(text: string, source: string = 'auto', target: stri
   }
 }
 
+// 添加词汇到本地存储和后端
+async function addToVocabulary(originalText: string, translatedText: string, context?: string): Promise<void> {
+  try {
+    // 创建词汇项
+    const vocabularyItem = {
+      original: originalText,
+      translation: translatedText,
+      context: context || window.location.href,
+      timestamp: Date.now(),
+      url: window.location.href,
+      title: document.title
+    };
+
+    // 保存到本地存储
+    const result = await chrome.storage.local.get('vocabulary');
+    const vocabularyList = result.vocabulary || [];
+    vocabularyList.push(vocabularyItem);
+    
+    // 限制词汇数量，保留最新的1000条
+    if (vocabularyList.length > 1000) {
+      vocabularyList.splice(0, vocabularyList.length - 1000);
+    }
+    
+    await chrome.storage.local.set({ vocabulary: vocabularyList });
+
+    // 同时发送到后端记录
+    await recordWords(originalText);
+    
+    console.log('Vocabulary added successfully:', vocabularyItem);
+  } catch (error) {
+    console.error('Failed to add vocabulary:', error);
+    throw error;
+  }
+}
+
+// 记录单词到后端
+async function recordWords(text: string, userId: number = 1): Promise<void> {
+  try {
+    const result = await sendMessage('recordWords', { text, userId });
+    
+    if (!result.ok) {
+      throw new Error(result.error?.message || '记录单词失败');
+    }
+    
+    console.log('Words recorded successfully:', result.data);
+  } catch (error) {
+    console.error('Failed to record words:', error);
+    // 记录单词失败不应该影响用户体验，所以这里只打印错误
+  }
+}
+
 // 创建翻译气泡
 function createTranslationBubble(): TranslationBubble {
   let bubble: HTMLDivElement | null = null;
@@ -342,6 +393,7 @@ function createTranslationBubble(): TranslationBubble {
           <div class="bubble-actions">
             <button class="btn-copy" title="复制翻译">📋</button>
             <button class="btn-replace" title="替换原文">🔄</button>
+            <button class="btn-vocabulary" title="添加到词汇本">📚</button>
             <button class="btn-more" title="更多选项">⚙️</button>
           </div>
         </div>
@@ -440,6 +492,7 @@ function bindBubbleEvents(bubble: HTMLDivElement, selection: Selection, original
   const closeBtn = bubble.querySelector('.btn-close') as HTMLButtonElement;
   const copyBtn = bubble.querySelector('.btn-copy') as HTMLButtonElement;
   const replaceBtn = bubble.querySelector('.btn-replace') as HTMLButtonElement;
+  const vocabularyBtn = bubble.querySelector('.btn-vocabulary') as HTMLButtonElement;
   const moreBtn = bubble.querySelector('.btn-more') as HTMLButtonElement;
   const retryBtn = bubble.querySelector('.btn-retry') as HTMLButtonElement;
 
@@ -466,6 +519,19 @@ function bindBubbleEvents(bubble: HTMLDivElement, selection: Selection, original
       selection.removeAllRanges();
       translationBubble.hide();
       showToast('已替换原文');
+    }
+  });
+
+  vocabularyBtn?.addEventListener('click', async () => {
+    const translatedText = bubble.querySelector('.translated-text')?.textContent;
+    if (translatedText && originalText) {
+      try {
+        await addToVocabulary(originalText, translatedText);
+        showToast('已添加到词汇本');
+      } catch (error) {
+        showToast('添加到词汇本失败');
+        console.error('Add to vocabulary failed:', error);
+      }
     }
   });
 

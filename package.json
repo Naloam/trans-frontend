@@ -7,11 +7,16 @@
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
+    "build:prod": "vite build --mode production",
     "preview": "vite preview",
     "clean": "rimraf dist",
-    "package": "npm run build && cd dist && zip -r ../immersive-translate.zip ."
+    "package": "npm run clean && npm run build:prod && cd dist && zip -r ../immersive-translate.zip .",
+    "lint": "tsc --noEmit",
+    "test:build": "npm run build && echo \"Build successful!\""
   },
   "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
@@ -37,5 +42,14 @@
     "vite"
   ],
   "author": "Your Name",
-  "license": "MIT"
+  "license": "MIT",
+  "main": "build.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Naloam/trans-frontend.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Naloam/trans-frontend/issues"
+  },
+  "homepage": "https://github.com/Naloam/trans-frontend#readme"
 }

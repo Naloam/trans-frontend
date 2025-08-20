@@ -8,6 +8,22 @@
  * 3. 在 DevTools Console 中查看日志和调试
  */
 
+// Service Worker 环境类型声明
+declare const self: ServiceWorkerGlobalScope;
+declare interface ServiceWorkerGlobalScope extends WorkerGlobalScope {
+  skipWaiting(): Promise<void>;
+  clients: Clients;
+  addEventListener(type: string, listener: (event: ExtendableEvent) => void): void;
+}
+
+declare interface ExtendableEvent extends Event {
+  waitUntil(promise: Promise<any>): void;
+}
+
+declare interface Clients {
+  claim(): Promise<void>;
+}
+
 // 消息类型定义
 interface TranslateRequest {
   id: string;
@@ -55,7 +71,7 @@ interface BackendTranslateResponse {
 }
 
 interface MessageRequest {
-  type: 'translate' | 'languages' | 'detect' | 'clearCache' | 'translateImage' | 'translateDocument';
+  type: 'translate' | 'languages' | 'detect' | 'clearCache' | 'translateImage' | 'translateDocument' | 'ping';
   payload: any;
 }
 
@@ -538,18 +554,18 @@ chrome.runtime.onInstalled.addListener((details) => {
 });
 
 // ServiceWorker生命周期事件处理
-self.addEventListener('install', (event: ExtendableEvent) => {
+(self as any).addEventListener('install', (event: any) => {
   console.log('Service Worker installing...');
   // 立即激活新的service worker
-  event.waitUntil(self.skipWaiting());
+  event.waitUntil((self as any).skipWaiting());
 });
 
-self.addEventListener('activate', (event: ExtendableEvent) => {
+(self as any).addEventListener('activate', (event: any) => {
   console.log('Service Worker activating...');
   // 立即接管所有页面
   event.waitUntil(
     Promise.all([
-      self.clients.claim(),
+      (self as any).clients.claim(),
       // 清理旧的缓存
       caches.keys().then(cacheNames => {
         return Promise.all(
@@ -566,11 +582,11 @@ self.addEventListener('activate', (event: ExtendableEvent) => {
 });
 
 // 处理ServiceWorker错误
-self.addEventListener('error', (event: ErrorEvent) => {
+(self as any).addEventListener('error', (event: any) => {
   console.error('Service Worker error:', event.error);
 });
 
-self.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => {
+(self as any).addEventListener('unhandledrejection', (event: any) => {
   console.error('Service Worker unhandled rejection:', event.reason);
 });
 

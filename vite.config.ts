@@ -63,7 +63,7 @@ export default defineConfig({
         options: resolve(process.cwd(), 'src/options/index.html'),
         
         // JavaScript 入口
-        serviceWorker: resolve(process.cwd(), 'src/worker/serviceWorker.ts'),
+        serviceWorker: resolve(process.cwd(), 'src/worker/simpleServiceWorker.ts'),
         contentScript: resolve(process.cwd(), 'src/content/contentScript.tsx')
       },
       output: {

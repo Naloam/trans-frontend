@@ -1,390 +1,187 @@
-var __defProp = Object.defineProperty;
-var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
-var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
-const DEFAULT_CONFIG = {
-  reduceMotion: false,
-  immersiveModeEnabled: true,
-  autoClipboard: false,
-  cacheTTL: 3600
-  // 1小时
-};
-class TranslationCache {
-  constructor() {
-    __publicField(this, "dbName", "immersive-translate");
-    __publicField(this, "version", 1);
-    __publicField(this, "storeName", "translations");
-    __publicField(this, "db", null);
-  }
-  async init() {
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open(this.dbName, this.version);
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => {
-        this.db = request.result;
-        resolve();
-      };
-      request.onupgradeneeded = (event) => {
-        const db = event.target.result;
-        if (!db.objectStoreNames.contains(this.storeName)) {
-          const store = db.createObjectStore(this.storeName, { keyPath: "hash" });
-          store.createIndex("expireAt", "expireAt", { unique: false });
+console.log("Service Worker starting...");
+class SimpleTranslationService {
+  async translate(text, source, target) {
+    try {
+      const response = await fetch("http://localhost:8000/translate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          segments: [{
+            id: Date.now().toString(),
+            text
+          }],
+          target_language: target === "zh" ? "中文" : "英文",
+          model_name: "qwen-turbo-latest",
+          identity: "通用专家",
+          extra_instructions: "请提供准确的翻译"
+        })
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      const result = await response.json();
+      const segment = result.translated_segments?.[0];
+      return {
+        ok: true,
+        data: {
+          translatedText: segment?.text || text,
+          detectedLanguage: source,
+          source: "online"
         }
       };
-    });
-  }
-  async get(hash) {
-    if (!this.db) await this.init();
-    return new Promise((resolve, reject) => {
-      const transaction = this.db.transaction([this.storeName], "readonly");
-      const store = transaction.objectStore(this.storeName);
-      const request = store.get(hash);
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => {
-        const result = request.result;
-        if (result && result.expireAt > Date.now()) {
-          resolve(result.data);
-        } else {
-          resolve(null);
+    } catch (error) {
+      console.error("Translation failed:", error);
+      return {
+        ok: false,
+        error: {
+          code: "TRANSLATION_FAILED",
+          message: error.message
         }
       };
-    });
+    }
   }
-  async set(hash, data, ttlSeconds = 3600) {
-    if (!this.db) await this.init();
-    return new Promise((resolve, reject) => {
-      const transaction = this.db.transaction([this.storeName], "readwrite");
-      const store = transaction.objectStore(this.storeName);
-      const expireAt = Date.now() + ttlSeconds * 1e3;
-      const request = store.put({ hash, data, expireAt });
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve();
-    });
-  }
-  async clearExpired() {
-    if (!this.db) await this.init();
-    return new Promise((resolve, reject) => {
-      const transaction = this.db.transaction([this.storeName], "readwrite");
-      const store = transaction.objectStore(this.storeName);
-      const index = store.index("expireAt");
-      const range = IDBKeyRange.upperBound(Date.now());
-      const request = index.openCursor(range);
-      request.onerror = () => reject(request.error);
-      request.onsuccess = (event) => {
-        const cursor = event.target.result;
-        if (cursor) {
-          cursor.delete();
-          cursor.continue();
-        } else {
-          resolve();
+  async recordWords(text, userId = 1) {
+    try {
+      const response = await fetch("http://localhost:8000/record-words", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          text,
+          user_id: userId
+        })
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      const result = await response.json();
+      return {
+        ok: true,
+        data: result
+      };
+    } catch (error) {
+      console.error("Record words failed:", error);
+      return {
+        ok: false,
+        error: {
+          code: "RECORD_WORDS_FAILED",
+          message: error.message
         }
       };
-    });
+    }
   }
 }
-const cache = new TranslationCache();
-async function generateHash(text, source, target, format = "text") {
-  const data = `${text}|${source}|${target}|${format}`;
-  const encoder = new TextEncoder();
-  const hashBuffer = await crypto.subtle.digest("SHA-256", encoder.encode(data));
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-async function fetchTranslation(request, retries = 2) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8e3);
-  try {
-    const backendRequest = {
-      target: request.target,
-      segments: [
-        {
-          id: request.id,
-          text: request.text,
-          model: "qwen-turbo-latest"
-          // 默认使用qwen-turbo-latest模型
+const simpleTranslationService = new SimpleTranslationService();
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log("Service Worker received message:", message.type);
+  if (message.type === "translate") {
+    simpleTranslationService.translate(
+      message.payload.text,
+      message.payload.source,
+      message.payload.target
+    ).then((result) => {
+      sendResponse(result);
+    }).catch((error) => {
+      sendResponse({
+        ok: false,
+        error: {
+          code: "HANDLER_ERROR",
+          message: error.message
         }
-      ]
-      // extra_args 可以根据需要添加
-    };
-    const backendUrl = "http://localhost:8000";
-    const response = await fetch(`${backendUrl}/translate`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(backendRequest),
-      signal: controller.signal
+      });
     });
-    clearTimeout(timeoutId);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-    const backendResponse = await response.json();
-    const translatedSegment = backendResponse.segments.find((segment) => segment.id === request.id);
-    if (!translatedSegment) {
-      throw new Error("无法找到对应的翻译结果");
-    }
-    return {
-      ok: true,
-      data: {
-        translatedText: translatedSegment.text,
-        detectedLanguage: backendResponse.translated,
-        alternatives: []
-      }
-    };
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (retries > 0 && error.name !== "AbortError") {
-      console.log(`Translation request failed, retrying... (${retries} attempts left)`);
-      await new Promise((resolve) => setTimeout(resolve, 1e3));
-      await new Promise((resolve) => setTimeout(resolve, 1e3));
-      return fetchTranslation(request, retries - 1);
-    }
-    return {
-      ok: false,
-      error: {
-        code: error.name === "AbortError" ? "TIMEOUT" : "NETWORK_ERROR",
-        message: error.message || "Translation request failed"
-      }
-    };
+    return true;
   }
-}
-async function translateImage(_fileData, fileName, fileType) {
-  try {
-    console.log("Translating image:", fileName, fileType);
-    await new Promise((resolve) => setTimeout(resolve, 2e3));
-    return {
-      ok: true,
-      data: {
-        translatedText: `这是从图片 "${fileName}" 中识别并翻译的文本内容。
-
-OCR识别和翻译功能需要连接到后端服务来实现。`,
-        detectedLanguage: "en",
-        alternatives: []
-      }
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      error: {
-        code: "IMAGE_TRANSLATION_ERROR",
-        message: error.message || "图片翻译失败"
-      }
-    };
-  }
-}
-async function translateDocument(_fileData, fileName, fileType) {
-  try {
-    console.log("Translating document:", fileName, fileType);
-    await new Promise((resolve) => setTimeout(resolve, 2e3));
-    return {
-      ok: true,
-      data: {
-        translatedText: `这是从文档 "${fileName}" 中提取并翻译的文本内容。
-
-文档解析和翻译功能需要连接到后端服务来实现。`,
-        detectedLanguage: "en",
-        alternatives: []
-      }
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      error: {
-        code: "DOCUMENT_TRANSLATION_ERROR",
-        message: error.message || "文档翻译失败"
-      }
-    };
-  }
-}
-async function handleTranslateRequest(request) {
-  try {
-    const hash = await generateHash(request.text, request.source, request.target, request.format);
-    const cached = await cache.get(hash);
-    if (cached) {
-      console.log("Translation cache hit:", hash);
-      return { ok: true, data: cached };
-    }
-    console.log("Translation cache miss, fetching from API:", hash);
-    const result = await fetchTranslation(request);
-    if (result.ok && result.data) {
-      const config = await getConfig();
-      await cache.set(hash, result.data, config.cacheTTL);
-    }
-    return result;
-  } catch (error) {
-    console.error("Translation handler error:", error);
-    return {
-      ok: false,
-      error: {
-        code: "HANDLER_ERROR",
-        message: error.message || "Internal translation error"
-      }
-    };
-  }
-}
-async function getConfig() {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(DEFAULT_CONFIG, (result) => {
-      resolve(result);
+  if (message.type === "recordWords") {
+    simpleTranslationService.recordWords(
+      message.payload.text,
+      message.payload.userId || 1
+    ).then((result) => {
+      sendResponse(result);
+    }).catch((error) => {
+      sendResponse({
+        ok: false,
+        error: {
+          code: "HANDLER_ERROR",
+          message: error.message
+        }
+      });
     });
-  });
-}
-async function handleMessage(message, sender, sendResponse) {
-  console.log("Service worker received message:", message.type, sender.tab?.id);
-  try {
-    switch (message.type) {
-      case "translate":
-        const translateResult = await handleTranslateRequest(message.payload);
-        sendResponse(translateResult);
-        break;
-      case "translateImage":
-        const imageTranslateResult = await translateImage(
-          message.payload.file,
-          message.payload.fileName,
-          message.payload.fileType
-        );
-        sendResponse(imageTranslateResult);
-        break;
-      case "translateDocument":
-        const documentTranslateResult = await translateDocument(
-          message.payload.file,
-          message.payload.fileName,
-          message.payload.fileType
-        );
-        sendResponse(documentTranslateResult);
-        break;
-      case "languages":
-        sendResponse({
-          ok: true,
-          data: {
-            languages: [
-              { code: "en", name: "English" },
-              { code: "zh", name: "中文" },
-              { code: "ja", name: "日本語" },
-              { code: "ko", name: "한국어" },
-              { code: "fr", name: "Français" },
-              { code: "de", name: "Deutsch" },
-              { code: "es", name: "Español" }
-            ]
-          }
-        });
-        break;
-      case "detect":
-        sendResponse({
-          ok: true,
-          data: {
-            detected: "en"
-          }
-        });
-        break;
-      case "clearCache":
-        await cache.clearExpired();
-        sendResponse({
-          ok: true,
-          data: { message: "Cache cleared" }
-        });
-        break;
-      case "ping":
-        sendResponse({
-          ok: true,
-          data: { message: "pong" }
-        });
-        break;
-      default:
-        sendResponse({
-          ok: false,
-          error: {
-            code: "UNKNOWN_MESSAGE_TYPE",
-            message: `Unknown message type: ${message.type}`
-          }
-        });
-    }
-  } catch (error) {
-    console.error("Message handler error:", error);
-    sendResponse({
-      ok: false,
-      error: {
-        code: "MESSAGE_HANDLER_ERROR",
-        message: error.message || "Internal message handler error"
-      }
-    });
+    return true;
   }
-}
-async function setupContextMenus() {
-  try {
-    await chrome.contextMenus.removeAll();
-    console.log("Existing context menus removed");
-  } catch (error) {
-    console.log("No existing context menus to remove or error:", error);
+  switch (message.type) {
+    case "languages":
+      sendResponse({
+        ok: true,
+        data: {
+          languages: [
+            { code: "auto", name: "自动检测" },
+            { code: "en", name: "English" },
+            { code: "zh", name: "中文" },
+            { code: "ja", name: "日本語" },
+            { code: "ko", name: "한국어" },
+            { code: "fr", name: "Français" },
+            { code: "de", name: "Deutsch" },
+            { code: "es", name: "Español" }
+          ]
+        }
+      });
+      break;
+    default:
+      sendResponse({
+        ok: false,
+        error: {
+          code: "UNKNOWN_MESSAGE_TYPE",
+          message: `Unknown message type: ${message.type}`
+        }
+      });
   }
+});
+chrome.runtime.onInstalled.addListener(() => {
+  console.log("Service Worker installed");
   try {
     chrome.contextMenus.create({
-      id: "translateImage",
-      title: "翻译选中图片",
-      contexts: ["image"],
-      documentUrlPatterns: ["<all_urls>"]
+      id: "translateSelection",
+      title: "翻译选中文本",
+      contexts: ["selection"]
     });
     chrome.contextMenus.create({
-      id: "translateDocument",
-      title: "翻译文件",
-      contexts: ["link"],
-      documentUrlPatterns: ["<all_urls>"],
-      targetUrlPatterns: ["*://*/*.pdf", "*://*/*.txt", "*://*/*.docx", "*://*/*.doc"]
+      id: "immersiveTranslate",
+      title: "沉浸式翻译",
+      contexts: ["page"]
     });
-    console.log("Context menus created successfully");
+    console.log("Context menus created");
   } catch (error) {
     console.error("Failed to create context menus:", error);
   }
-}
-chrome.runtime.onInstalled.addListener(() => {
-  setupContextMenus();
 });
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-  console.log("Context menu clicked on tab:", tab?.id);
-  if (info.menuItemId === "translateImage" && info.srcUrl) {
-    console.log("Translate image clicked:", info.srcUrl);
-  } else if (info.menuItemId === "translateDocument" && info.linkUrl) {
-    console.log("Translate document clicked:", info.linkUrl);
+  console.log("Context menu clicked:", info.menuItemId);
+  if (!tab?.id) {
+    console.error("Tab ID is undefined");
+    return;
+  }
+  if (info.menuItemId === "translateSelection" && info.selectionText) {
+    chrome.tabs.sendMessage(tab.id, {
+      type: "translateSelection",
+      text: info.selectionText
+    });
+  } else if (info.menuItemId === "immersiveTranslate") {
+    chrome.tabs.sendMessage(tab.id, {
+      type: "toggleImmersiveTranslation"
+    });
   }
 });
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  handleMessage(message, sender, sendResponse);
-  return true;
+chrome.commands.onCommand.addListener((command, tab) => {
+  console.log("Command triggered:", command);
+  if (command === "toggle-immersive" && tab?.id) {
+    chrome.tabs.sendMessage(tab.id, {
+      type: "toggleImmersiveTranslation"
+    });
+  }
 });
-chrome.runtime.onInstalled.addListener((details) => {
-  console.log("Extension installed or updated:", details.reason);
-  cache.init().catch((error) => {
-    console.error("Failed to initialize cache:", error);
-  });
-});
-self.addEventListener("install", (event) => {
-  console.log("Service Worker installing...");
-  event.waitUntil(self.skipWaiting());
-});
-self.addEventListener("activate", (event) => {
-  console.log("Service Worker activating...");
-  event.waitUntil(
-    Promise.all([
-      self.clients.claim(),
-      // 清理旧的缓存
-      caches.keys().then((cacheNames) => {
-        return Promise.all(
-          cacheNames.map((cacheName) => {
-            if (cacheName !== "immersive-translate-v1") {
-              console.log("Deleting old cache:", cacheName);
-              return caches.delete(cacheName);
-            }
-          })
-        );
-      })
-    ])
-  );
-});
-self.addEventListener("error", (event) => {
-  console.error("Service Worker error:", event.error);
-});
-self.addEventListener("unhandledrejection", (event) => {
-  console.error("Service Worker unhandled rejection:", event.reason);
-});
-console.log("Service Worker loaded");
+console.log("Simple Service Worker loaded successfully");
 //# sourceMappingURL=serviceWorker.js.map

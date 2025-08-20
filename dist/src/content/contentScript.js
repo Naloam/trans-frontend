@@ -1,3 +1,14 @@
+const initContentScript = () => {
+  if (window.__IMMERSIVE_TRANSLATE_LOADED__) {
+    console.log("Immersive Translate content script already loaded, skipping initialization");
+    return false;
+  }
+  window.__IMMERSIVE_TRANSLATE_LOADED__ = true;
+  return true;
+};
+if (!initContentScript()) {
+  throw new Error("Immersive Translate content script already loaded, skipping initialization");
+}
 let shadowRoot = null;
 let isImmersiveMode = false;
 let currentSelection = null;
@@ -42,6 +53,7 @@ document.addEventListener("visibilitychange", () => {
 });
 window.addEventListener("beforeunload", () => {
   resetExtensionState();
+  delete window.__IMMERSIVE_TRANSLATE_LOADED__;
 });
 document.addEventListener("DOMContentLoaded", async () => {
   console.log("Page loaded, initializing extension...");
@@ -88,6 +100,17 @@ function createShadowContainer() {
 async function sendMessage(type, payload) {
   return new Promise((resolve) => {
     try {
+      if (!chrome.runtime?.sendMessage) {
+        console.warn("Chrome runtime not available");
+        resolve({
+          ok: false,
+          error: {
+            code: "RUNTIME_UNAVAILABLE",
+            message: "运行时不可用"
+          }
+        });
+        return;
+      }
       chrome.runtime.sendMessage({ type, payload }, (response) => {
         if (chrome.runtime.lastError) {
           console.warn("Error sending message to service worker:", chrome.runtime.lastError.message);
@@ -177,6 +200,41 @@ async function translateText(text, source = "auto", target = "zh") {
     };
   }
 }
+async function addToVocabulary(originalText, translatedText, context) {
+  try {
+    const vocabularyItem = {
+      original: originalText,
+      translation: translatedText,
+      context: context || window.location.href,
+      timestamp: Date.now(),
+      url: window.location.href,
+      title: document.title
+    };
+    const result = await chrome.storage.local.get("vocabulary");
+    const vocabularyList = result.vocabulary || [];
+    vocabularyList.push(vocabularyItem);
+    if (vocabularyList.length > 1e3) {
+      vocabularyList.splice(0, vocabularyList.length - 1e3);
+    }
+    await chrome.storage.local.set({ vocabulary: vocabularyList });
+    await recordWords(originalText);
+    console.log("Vocabulary added successfully:", vocabularyItem);
+  } catch (error) {
+    console.error("Failed to add vocabulary:", error);
+    throw error;
+  }
+}
+async function recordWords(text, userId = 1) {
+  try {
+    const result = await sendMessage("recordWords", { text, userId });
+    if (!result.ok) {
+      throw new Error(result.error?.message || "记录单词失败");
+    }
+    console.log("Words recorded successfully:", result.data);
+  } catch (error) {
+    console.error("Failed to record words:", error);
+  }
+}
 function createTranslationBubble() {
   let bubble = null;
   let isVisible = false;
@@ -211,6 +269,7 @@ function createTranslationBubble() {
           <div class="bubble-actions">
             <button class="btn-copy" title="复制翻译">📋</button>
             <button class="btn-replace" title="替换原文">🔄</button>
+            <button class="btn-vocabulary" title="添加到词汇本">📚</button>
             <button class="btn-more" title="更多选项">⚙️</button>
           </div>
         </div>
@@ -282,6 +341,7 @@ function bindBubbleEvents(bubble, selection, originalText) {
   const closeBtn = bubble.querySelector(".btn-close");
   const copyBtn = bubble.querySelector(".btn-copy");
   const replaceBtn = bubble.querySelector(".btn-replace");
+  const vocabularyBtn = bubble.querySelector(".btn-vocabulary");
   const moreBtn = bubble.querySelector(".btn-more");
   const retryBtn = bubble.querySelector(".btn-retry");
   closeBtn?.addEventListener("click", () => {
@@ -304,6 +364,18 @@ function bindBubbleEvents(bubble, selection, originalText) {
       selection.removeAllRanges();
       translationBubble.hide();
       showToast("已替换原文");
+    }
+  });
+  vocabularyBtn?.addEventListener("click", async () => {
+    const translatedText = bubble.querySelector(".translated-text")?.textContent;
+    if (translatedText && originalText) {
+      try {
+        await addToVocabulary(originalText, translatedText);
+        showToast("已添加到词汇本");
+      } catch (error) {
+        showToast("添加到词汇本失败");
+        console.error("Add to vocabulary failed:", error);
+      }
     }
   });
   moreBtn?.addEventListener("click", () => {

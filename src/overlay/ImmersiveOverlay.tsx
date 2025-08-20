@@ -1,17 +1,51 @@
 /**
- * Immersive Overlay React Component
- * 沉浸式翻译全屏覆盖组件
- * 
- * 功能：
- * - 左右分栏显示原文和译文
- * - 支持逐句折叠展开
- * - 多候选译文选择
- * - 上下文记忆和术语统一
- * - 多种显示模式切换
- * - 完整的无障碍支持
+ * 增强的沉浸式翻译覆盖组件
+ * 页面级翻译覆盖，支持智能翻译气泡和多种交互模式
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+
+// SVG图标组件
+const XMarkIcon = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+  </svg>
+);
+
+const SpeakerWaveIcon = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.59-.79-1.59-1.59V9.75c0-.8.71-1.59 1.59-1.59h2.24z" />
+  </svg>
+);
+
+const DocumentDuplicateIcon = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" />
+  </svg>
+);
+
+const ArrowPathIcon = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+  </svg>
+);
+
+const AdjustmentsHorizontalIcon = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m0 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+  </svg>
+);
+
+interface TranslationBubble {
+  id: string;
+  originalText: string;
+  translatedText: string;
+  position: { x: number; y: number };
+  element: HTMLElement;
+  visible: boolean;
+  confidence?: number;
+  source?: string;
+}
 
 // 类型定义
 interface ImmersiveOverlayProps {
@@ -385,7 +419,7 @@ const ImmersiveOverlay: React.FC<ImmersiveOverlayProps> = ({
                         onClick={() => toggleSentenceExpansion(index)}
                         role="button"
                         tabIndex={0}
-                        aria-expanded={sentence.isExpanded}
+                        aria-expanded={!!sentence.isExpanded}
                         aria-label={`译文句子 ${index + 1}，点击展开候选`}
                       >
                         <p className="text-gray-800 leading-relaxed">

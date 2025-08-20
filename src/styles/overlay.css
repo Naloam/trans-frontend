@@ -1,0 +1,351 @@
+/* 翻译扩展全局样式 */
+
+/* 基础重置样式 */
+.translation-overlay * {
+  box-sizing: border-box;
+}
+
+/* 翻译气泡样式 */
+.translation-bubble {
+  position: fixed;
+  z-index: 999999;
+  max-width: 300px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  padding: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translateY(-100%);
+}
+
+.translation-bubble.visible {
+  opacity: 1;
+  transform: translateY(-100%) scale(1);
+}
+
+.translation-bubble.hidden {
+  opacity: 0;
+  transform: translateY(-100%) scale(0.95);
+  pointer-events: none;
+}
+
+/* 原文样式 */
+.translation-bubble .original-text {
+  color: #6b7280;
+  font-size: 12px;
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* 翻译结果样式 */
+.translation-bubble .translated-text {
+  color: #1f2937;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+/* 元信息样式 */
+.translation-bubble .meta-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #9ca3af;
+  margin-bottom: 8px;
+}
+
+/* 操作按钮容器 */
+.translation-bubble .actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.translation-bubble .action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 操作按钮样式 */
+.translation-bubble .action-btn {
+  padding: 4px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.translation-bubble .action-btn:hover {
+  background-color: #f3f4f6;
+  color: #374151;
+}
+
+.translation-bubble .action-btn.close:hover {
+  background-color: #fee2e2;
+  color: #dc2626;
+}
+
+/* 气泡箭头 */
+.translation-bubble::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border: 8px solid transparent;
+  border-top-color: white;
+}
+
+.translation-bubble::before {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border: 9px solid transparent;
+  border-top-color: #e5e7eb;
+  z-index: -1;
+}
+
+/* 控制面板样式 */
+.immersive-control-panel {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 999998;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  padding: 16px;
+  min-width: 280px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* 控制面板标题 */
+.control-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.control-panel-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.control-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 开关按钮样式 */
+.toggle-switch {
+  position: relative;
+  width: 48px;
+  height: 24px;
+  background: #d1d5db;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.toggle-switch.active {
+  background: #3b82f6;
+}
+
+.toggle-switch .toggle-handle {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.3s;
+}
+
+.toggle-switch.active .toggle-handle {
+  transform: translateX(24px);
+}
+
+/* 表单控件样式 */
+.form-group {
+  margin-bottom: 12px;
+}
+
+.form-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+.form-select {
+  width: 100%;
+  padding: 8px 12px;
+  background: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #374151;
+  transition: all 0.2s;
+}
+
+.form-select:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px #3b82f6;
+  border-color: transparent;
+}
+
+.form-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 范围滑块样式 */
+.range-slider {
+  width: 100%;
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 3px;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.range-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  background: #3b82f6;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.range-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: #3b82f6;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+}
+
+/* 加载动画 */
+.loading-spinner {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 999999;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 50%;
+  padding: 12px;
+}
+
+.spinner-icon {
+  width: 24px;
+  height: 24px;
+  color: white;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .translation-bubble {
+    max-width: 280px;
+    font-size: 13px;
+  }
+  
+  .immersive-control-panel {
+    min-width: 260px;
+    top: 8px;
+    right: 8px;
+  }
+}
+
+/* 深色主题支持 */
+@media (prefers-color-scheme: dark) {
+  .translation-bubble {
+    background: #1f2937;
+    border-color: #374151;
+    color: #f9fafb;
+  }
+  
+  .translation-bubble .original-text {
+    color: #9ca3af;
+  }
+  
+  .translation-bubble .translated-text {
+    color: #f3f4f6;
+  }
+  
+  .immersive-control-panel {
+    background: #1f2937;
+    border-color: #374151;
+    color: #f9fafb;
+  }
+  
+  .form-select {
+    background: #374151;
+    border-color: #4b5563;
+    color: #f9fafb;
+  }
+}
+
+/* 无障碍支持 */
+@media (prefers-reduced-motion: reduce) {
+  .translation-bubble {
+    transition: none;
+  }
+  
+  .toggle-switch .toggle-handle {
+    transition: none;
+  }
+  
+  .spinner-icon {
+    animation: none;
+  }
+}
+
+/* 高对比度支持 */
+@media (prefers-contrast: high) {
+  .translation-bubble {
+    border: 2px solid #000;
+  }
+  
+  .action-btn {
+    border: 1px solid currentColor;
+  }
+}
