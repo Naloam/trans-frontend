@@ -9,18 +9,11 @@
  */
 
 // Service Worker 环境类型声明
-declare const self: ServiceWorkerGlobalScope;
-declare interface ServiceWorkerGlobalScope extends WorkerGlobalScope {
-  skipWaiting(): Promise<void>;
-  clients: Clients;
-  addEventListener(type: string, listener: (event: ExtendableEvent) => void): void;
-}
-
-declare interface ExtendableEvent extends Event {
+interface ExtendableEvent extends Event {
   waitUntil(promise: Promise<any>): void;
 }
 
-declare interface Clients {
+interface Clients {
   claim(): Promise<void>;
 }
 
@@ -32,7 +25,6 @@ interface TranslateRequest {
   target: string;
   format?: 'text' | 'html';
 }
-
 
 interface TranslateResponse {
   ok: boolean;
@@ -47,31 +39,8 @@ interface TranslateResponse {
   };
 }
 
-// 后端API请求格式
-interface BackendTranslateRequest {
-  target: string;
-  segments: Array<{
-    id: string;
-    text: string;
-    model?: string;
-  }>;
-  extra_args?: {
-    style?: string;
-    identity?: string;
-  };
-}
-
-// 后端API响应格式
-interface BackendTranslateResponse {
-  translated: string;
-  segments: Array<{
-    id: string;
-    text: string;
-  }>;
-}
-
 interface MessageRequest {
-  type: 'translate' | 'languages' | 'detect' | 'clearCache' | 'translateImage' | 'translateDocument' | 'ping';
+  type: 'translate' | 'languages' | 'detect' | 'clearCache' | 'translateImage' | 'translateDocument' | 'ping' | 'recordWords';
   payload: any;
 }
 
@@ -204,19 +173,22 @@ async function fetchTranslation(request: TranslateRequest, retries: number = 2):
 
   try {
     // 构造后端API请求格式
-    const backendRequest: BackendTranslateRequest = {
-      target: request.target,
+    const backendRequest = {
       segments: [
         {
           id: request.id,
-          text: request.text,
-          model: "qwen-turbo-latest" // 默认使用qwen-turbo-latest模型
+          text: request.text
         }
       ],
-      // extra_args 可以根据需要添加
+      target_language: request.target === 'zh' ? '中文' : '英文', // 转换为后端期望的格式
+      model_name: "qwen-turbo-latest",
+      identity: "通用专家",
+      extra_instructions: ""
     };
 
     const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:8000';
+
+    console.log('Sending request to backend:', backendUrl, backendRequest);
 
     const response = await fetch(`${backendUrl}/translate`, {
       method: 'POST',
@@ -234,34 +206,39 @@ async function fetchTranslation(request: TranslateRequest, retries: number = 2):
     }
 
     // 处理后端响应格式
-    const backendResponse: BackendTranslateResponse = await response.json();
+    const backendResponse = await response.json();
+
+    console.log('Backend response:', backendResponse);
 
     // 转换为前端期望的格式
-    const translatedSegment = backendResponse.segments.find(segment => segment.id === request.id);
+    if (backendResponse.translated_segments && backendResponse.translated_segments.length > 0) {
+      const translatedSegment = backendResponse.translated_segments.find((segment: any) => segment.id === request.id);
 
-    if (!translatedSegment) {
-      throw new Error('无法找到对应的翻译结果');
+      if (translatedSegment) {
+        return {
+          ok: true,
+          data: {
+            translatedText: translatedSegment.text,
+            detectedLanguage: request.source,
+            alternatives: []
+          }
+        };
+      }
     }
 
-    return {
-      ok: true,
-      data: {
-        translatedText: translatedSegment.text,
-        detectedLanguage: backendResponse.translated,
-        alternatives: []
-      }
-    };
+    throw new Error('无法找到对应的翻译结果');
 
   } catch (error: any) {
     clearTimeout(timeoutId);
 
     if (retries > 0 && error.name !== 'AbortError') {
-      console.log(`Translation request failed, retrying... (${retries} attempts left)`);
-      await new Promise(resolve => setTimeout(resolve, 1000)); // 等待1秒后重试
+      console.log(`Translation request failed, retrying... (${retries} attempts left)`, error.message);
       await new Promise(resolve => setTimeout(resolve, 1000)); // 等待1秒后重试
       return fetchTranslation(request, retries - 1);
     }
 
+    console.error('Translation failed after all retries:', error);
+    
     return {
       ok: false,
       error: {
@@ -371,6 +348,47 @@ async function handleTranslateRequest(request: TranslateRequest): Promise<Transl
   }
 }
 
+// 处理记录单词请求
+async function handleRecordWordsRequest(payload: { text: string; userId?: number }): Promise<TranslateResponse> {
+  try {
+    console.log('Recording words:', payload);
+
+    const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:8000';
+    
+    const response = await fetch(`${backendUrl}/record-words`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        text: payload.text,
+        user_id: payload.userId || 1
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    
+    return {
+      ok: true,
+      data: result
+    };
+
+  } catch (error: any) {
+    console.error('Record words failed:', error);
+    return {
+      ok: false,
+      error: {
+        code: 'RECORD_WORDS_ERROR',
+        message: error.message || 'Failed to record words'
+      }
+    };
+  }
+}
+
 // 获取配置
 async function getConfig(): Promise<ExtensionConfig> {
   return new Promise((resolve) => {
@@ -392,9 +410,20 @@ async function handleMessage(
 
   try {
     switch (message.type) {
+      case 'ping':
+        // 处理ping消息，用于检查扩展状态
+        console.log('Ping received from content script');
+        sendResponse({ ok: true, data: { status: 'ready', timestamp: Date.now() } });
+        break;
+
       case 'translate':
         const translateResult = await handleTranslateRequest(message.payload);
         sendResponse(translateResult);
+        break;
+
+      case 'recordWords':
+        const recordResult = await handleRecordWordsRequest(message.payload);
+        sendResponse(recordResult);
         break;
 
       case 'translateImage':

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chrome 翻译插件测试页面</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+        }
+        .instruction {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        .text-sample {
+            background-color: #fff;
+            border: 2px dashed #ccc;
+            padding: 15px;
+            margin: 10px 0;
+            cursor: pointer;
+        }
+        .text-sample:hover {
+            border-color: #007cff;
+            background-color: #f8f9ff;
+        }
+        .highlight {
+            background-color: yellow;
+            padding: 2px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Chrome 翻译插件测试页面</h1>
+    
+    <div class="instruction">
+        <h3>使用说明:</h3>
+        <ul>
+            <li>选中下面的英文文本，应该会弹出翻译气泡</li>
+            <li>双击单词也可以触发翻译</li>
+            <li>使用快捷键 Ctrl+Shift+Y 可以打开沉浸式翻译模式</li>
+            <li>点击翻译气泡中的重试按钮可以重新翻译</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>短句测试</h2>
+        <div class="text-sample">
+            Hello world
+        </div>
+        <div class="text-sample">
+            How are you today?
+        </div>
+        <div class="text-sample">
+            Good morning, have a nice day!
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>段落测试</h2>
+        <div class="text-sample">
+            The quick brown fox jumps over the lazy dog. This sentence contains every letter of the English alphabet.
+        </div>
+        <div class="text-sample">
+            Artificial intelligence (AI) is intelligence demonstrated by machines, in contrast to the natural intelligence displayed by humans and animals.
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>长文本测试</h2>
+        <div class="text-sample">
+            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>技术术语测试</h2>
+        <div class="text-sample">
+            Machine learning algorithms can automatically improve through experience without being explicitly programmed.
+        </div>
+        <div class="text-sample">
+            React is a JavaScript library for building user interfaces, particularly web applications.
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>混合内容测试</h2>
+        <p>这里有一些中英文混合的内容：</p>
+        <div class="text-sample">
+            Today is a beautiful day. 今天是美好的一天。Tomorrow will be even better!
+        </div>
+    </div>
+
+    <script>
+        // 添加一些交互效果
+        document.addEventListener('DOMContentLoaded', function() {
+            const samples = document.querySelectorAll('.text-sample');
+            
+            samples.forEach(sample => {
+                sample.addEventListener('click', function() {
+                    // 选中文本
+                    const range = document.createRange();
+                    range.selectNodeContents(this);
+                    const selection = window.getSelection();
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                });
+            });
+        });
+
+        // 测试扩展状态
+        setTimeout(() => {
+            if (typeof chrome !== 'undefined' && chrome.runtime) {
+                console.log('Chrome extension runtime available');
+            } else {
+                console.warn('Chrome extension runtime not available');
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

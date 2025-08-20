@@ -72,6 +72,8 @@ async function initializeExtension(): Promise<boolean> {
   try {
     if (extensionInitialized) return true;
 
+    console.log('Initializing extension...');
+
     // 检查扩展状态
     const isReady = await checkExtensionStatus();
     if (isReady) {
@@ -88,7 +90,8 @@ async function initializeExtension(): Promise<boolean> {
 
     if (retryCount < MAX_RETRY_COUNT) {
       // 等待一段时间后重试
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      console.log(`Will retry in 2 seconds... (attempt ${retryCount}/${MAX_RETRY_COUNT})`);
+      await new Promise(resolve => setTimeout(resolve, 2000));
       return initializeExtension();
     } else {
       console.error('Extension initialization failed after max retries');
@@ -242,7 +245,9 @@ async function checkExtensionStatus(): Promise<boolean> {
     }
 
     // 尝试发送一个简单的ping消息
+    console.log('Sending ping to service worker...');
     const result = await sendMessage('ping', {});
+    console.log('Ping result:', result);
     return result.ok;
   } catch (error) {
     console.warn('Extension status check failed:', error);

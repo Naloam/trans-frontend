@@ -6,7 +6,7 @@ console.log('Service Worker starting...');
 
 // 基本的翻译服务
 class SimpleTranslationService {
-  async translate(text, source, target) {
+  async translate(text: string, source: string, target: string) {
     // 使用真正后端的API格式
     try {
       const response = await fetch('http://localhost:8000/translate', {
@@ -91,8 +91,21 @@ class SimpleTranslationService {
 const simpleTranslationService = new SimpleTranslationService();
 
 // 消息处理器
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message: any, _sender: any, sendResponse: any) => {
   console.log('Service Worker received message:', message.type);
+
+  // 处理ping消息 - 用于检查扩展状态
+  if (message.type === 'ping') {
+    console.log('Ping received from content script');
+    sendResponse({ 
+      ok: true, 
+      data: { 
+        status: 'ready', 
+        timestamp: Date.now() 
+      } 
+    });
+    return true;
+  }
 
   if (message.type === 'translate') {
     // 异步处理翻译请求

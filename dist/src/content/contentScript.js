@@ -18,6 +18,7 @@ const MAX_RETRY_COUNT = 3;
 async function initializeExtension() {
   try {
     if (extensionInitialized) return true;
+    console.log("Initializing extension...");
     const isReady = await checkExtensionStatus();
     if (isReady) {
       extensionInitialized = true;
@@ -31,7 +32,8 @@ async function initializeExtension() {
     console.warn("Extension initialization failed:", error);
     retryCount++;
     if (retryCount < MAX_RETRY_COUNT) {
-      await new Promise((resolve) => setTimeout(resolve, 1e3));
+      console.log(`Will retry in 2 seconds... (attempt ${retryCount}/${MAX_RETRY_COUNT})`);
+      await new Promise((resolve) => setTimeout(resolve, 2e3));
       return initializeExtension();
     } else {
       console.error("Extension initialization failed after max retries");
@@ -153,7 +155,9 @@ async function checkExtensionStatus() {
       console.warn("Chrome runtime not available");
       return false;
     }
+    console.log("Sending ping to service worker...");
     const result = await sendMessage("ping", {});
+    console.log("Ping result:", result);
     return result.ok;
   } catch (error) {
     console.warn("Extension status check failed:", error);

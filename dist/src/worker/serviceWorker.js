@@ -75,8 +75,19 @@ class SimpleTranslationService {
   }
 }
 const simpleTranslationService = new SimpleTranslationService();
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   console.log("Service Worker received message:", message.type);
+  if (message.type === "ping") {
+    console.log("Ping received from content script");
+    sendResponse({
+      ok: true,
+      data: {
+        status: "ready",
+        timestamp: Date.now()
+      }
+    });
+    return true;
+  }
   if (message.type === "translate") {
     simpleTranslationService.translate(
       message.payload.text,
